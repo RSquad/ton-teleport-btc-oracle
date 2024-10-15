@@ -4,7 +4,6 @@ dotenv.config();
 
 export class ConfigService {
   get<T = string>(key: string): T | undefined {
-    // return this.envConfig[key as string] as unknown as T;
     return process.env[key as string]
       ? (process.env[key as string] as T)
       : undefined;
