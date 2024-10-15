@@ -1,0 +1,36 @@
+{
+  "name": "@ton-teleport/oracle",
+  "version": "0.0.1",
+  "main": "dist/index.cjs",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "dev": "bun run --watch src/index.ts",
+    "build": "bun build ./src/index.ts --outdir dist --target bun",
+    "build:frost": "cargo-cp-artifact -nc ./frost.node -- cargo build --manifest-path ./frost/Cargo.toml --message-format=json-render-diagnostics",
+    "test": "bun test",
+    "test:frost": "cargo test --manifest-path ./frost/Cargo.toml"
+  },
+  "dependencies": {
+    "@ton/core": "^0.56.3",
+    "@ton/crypto": "^3.2.0",
+    "@ton/ton": "^15.0.0",
+    "bitcoinjs-lib": "^6.1.5",
+    "dotenv": "^16.4.5",
+    "ecpair": "^2.1.0",
+    "node-cron": "3.0.3",
+    "pino": "^9.4.0",
+    "pino-pretty": "^11.2.2"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.11",
+    "@types/node-cron": "^3.0.11",
+    "@types/pino": "^7.0.5",
+    "axios": "^1.7.3",
+    "cargo-cp-artifact": "^0.1.9",
+    "prettier": "^3.3.3",
+    "tiny-secp256k1": "^2.2.3",
+    "typescript": "^5.6.2"
+  }
+}

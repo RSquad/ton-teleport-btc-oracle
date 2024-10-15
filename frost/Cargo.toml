@@ -1,0 +1,22 @@
+[package]
+name = "oracle"
+version = "0.0.1"
+authors = ["RSquad Blockchain Lab <admin@rsquad.io>"]
+edition = "2018"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+k256 = { version = "0.13.0", features = ["arithmetic"] }
+bitcoin = "0.31.1"
+frost-core = { git = "https://github.com/zebra-lucky/frost.git",branch = "add-secp256k1-tr" }
+frost-secp256k1-tr = { git = "https://github.com/zebra-lucky/frost.git",branch = "add-secp256k1-tr", features = ["serde"] }
+secp256k1 = { version = "0.27.0", features = ["serde"] }
+getrandom = { version = "0.2.11", features = ["js"] }
+rand = "0.8.5"
+serde = { version = "1.0.193", features = ["derive"] }
+serde_derive = "1.0.193"
+neon = { version = "0.10.1", default-features = false, features = ["napi-6"] }
+num_cpus = "1.16.0"
+hex = "0.4.3"
