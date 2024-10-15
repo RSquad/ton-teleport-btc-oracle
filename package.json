@@ -4,11 +4,11 @@
   "main": "src/index.ts",
   "type": "module",
   "scripts": {
-    "start": "bun run src/index.ts",
-    "dev": "bun run --watch src/index.ts",
-    "build": "bun build ./src/index.ts --outdir dist --target bun",
+    "start": "bun build:frost && bun run src/index.ts",
+    "dev": "bun build:frost && bun run --watch src/index.ts",
+    "build": "bun build:frost && bun build ./src/index.ts --outdir dist --target bun",
     "build:frost": "cargo-cp-artifact -nc ./frost.node -- cargo build --manifest-path ./frost/Cargo.toml --message-format=json-render-diagnostics",
-    "test": "bun test",
+    "test": "bun build:frost && bun test",
     "test:frost": "cargo test --manifest-path ./frost/Cargo.toml"
   },
   "dependencies": {
