@@ -1,9 +1,8 @@
 {
   "name": "@ton-teleport/oracle",
   "version": "0.0.1",
-  "main": "dist/index.cjs",
-  "module": "dist/index.esm.js",
-  "types": "dist/index.d.ts",
+  "main": "src/index.ts",
+  "type": "module",
   "scripts": {
     "start": "bun run src/index.ts",
     "dev": "bun run --watch src/index.ts",

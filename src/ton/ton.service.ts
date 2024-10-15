@@ -2,7 +2,7 @@ import { Address, TonClient } from "@ton/ton";
 import type { OpenedContract } from "@ton/ton";
 import { Logger } from "../base/logger.service";
 import { ConfigService } from "../base/config.service";
-import { DKGChannelContract, TeleportContract } from "../contracts";
+import { DKGChannelContract } from "../contracts";
 
 export class TonService {
   protected readonly logger = new Logger(TonService.name);
@@ -14,7 +14,6 @@ export class TonService {
   tonClient: TonClient;
 
   tcDkgChannel: OpenedContract<DKGChannelContract>;
-  tcTeleport: OpenedContract<TeleportContract>;
 
   constructor(configService: ConfigService) {
     this.configService = configService;
@@ -33,14 +32,6 @@ export class TonService {
       DKGChannelContract.createFromAddress(
         Address.parse(
           this.configService.getOrThrow("COMMON_TON_CONTRACT_DKG_CHANNEL"),
-        ),
-      ),
-    );
-
-    this.tcTeleport = this.tonClient.open(
-      TeleportContract.createFromAddress(
-        Address.parse(
-          this.configService.getOrThrow("COMMON_TON_CONTRACT_TELEPORT_ADDR"),
         ),
       ),
     );
