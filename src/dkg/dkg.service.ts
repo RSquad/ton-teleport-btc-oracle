@@ -56,16 +56,18 @@ export class DkgService {
     this.keyStore = keyStore;
 
     this.inProgress = false;
-    this.maxSigners =
-      +this.configService.getOrThrow<number>("ORACLE_MAX_SIGNERS");
-    this.minSigners =
-      +this.configService.getOrThrow<number>("ORACLE_MIN_SIGNERS");
+    this.maxSigners = +this.configService.getOrThrow<number>(
+      "STANDALONE_MAX_SIGNERS",
+    );
+    this.minSigners = +this.configService.getOrThrow<number>(
+      "STANDALONE_MIN_SIGNERS",
+    );
     this.dkgRound = DkgRound.NOT_STARTED;
     this.pubkey = this.configService.getOrThrow<string>(
-      "RUNTIME_ORACLE_PUBKEY",
+      "STANDALONE_VALIDATOR_PUBKEY",
     );
     this.signer = new TonSigner(
-      this.configService.getOrThrow<string>("RUNTIME_TON_SIGNER_SECRET_KEY"),
+      this.configService.getOrThrow<string>("STANDALONE_VALIDATOR_SECRET"),
     );
     this.bufferPubKey = Buffer.from(this.pubkey, "hex");
     this.identifier = frost.deriveIdentifier(this.bufferPubKey);

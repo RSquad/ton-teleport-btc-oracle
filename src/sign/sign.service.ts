@@ -31,10 +31,11 @@ export class SignService {
     this.keyStore = keyStore;
 
     this.inProgress = false;
-    this.minSigners =
-      +this.configService.getOrThrow<number>("ORACLE_MIN_SIGNERS");
+    this.minSigners = +this.configService.getOrThrow<number>(
+      "STANDALONE_MIN_SIGNERS",
+    );
     this.pubkey = this.configService.getOrThrow<string>(
-      "RUNTIME_ORACLE_PUBKEY",
+      "STANDALONE_VALIDATOR_PUBKEY",
     );
     this.identifier = Buffer.from(
       frost.deriveIdentifier(Buffer.from(this.pubkey, "hex")),

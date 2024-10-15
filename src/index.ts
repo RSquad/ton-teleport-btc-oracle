@@ -13,7 +13,7 @@ enum CronExpression {
 async function main() {
   const configService = new ConfigService();
   const tonService = new TonService(configService);
-  const secretRootDir = configService.getOrThrow<string>("ORACLE_KEYSTORE_DIR");
+  const secretRootDir = configService.getOrThrow<string>("KEYSTORE_DIR");
   const keyStore = new KeystoreService(StrategyEnum.FILE, secretRootDir);
   const dkgService = new DkgService(configService, tonService, keyStore);
   const signService = new SignService(
