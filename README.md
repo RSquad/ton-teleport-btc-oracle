@@ -29,9 +29,9 @@ TON_CENTER_API_KEY=your_api_key_here
 ```
 
 #### Contract Variables
-`DKG_CHANNEL` — The address of the DKGChannel contract in TON. Example:
+`COORDINATOR` — The address of the Coordinator contract in TON. Example:
 ```bash
-DKG_CHANNEL=EQDIEVARwkn6_4qNWeDlHwT40kzJBGIzKo4vcqRSvDUUS6bT
+COORDINATOR=EQDIEVARwkn6_4qNWeDlHwT40kzJBGIzKo4vcqRSvDUUS6bT
 ```
 
 #### Key Storage
@@ -57,15 +57,19 @@ If `STANDALONE=0`, set the following variables:
 
 `SERVER_PUBLIC_KEY_PATH` —  Path to the validator’s public key. Example:
 ```bash
-SERVER_PUBLIC_KEY_PATH=/path/to/public/key
+SERVER_PUBLIC_KEY_PATH=<path>/certs/server.pub 
 ```
 `CLIENT_PRIVATE_KEY_PATH` — Path to the validator’s private key. Example:
 ```bash
-CLIENT_PRIVATE_KEY_PATH=/path/to/private/key
+CLIENT_PRIVATE_KEY_PATH=<path>/certs/client
 ```
 `VALIDATOR_ENGINE_CONSOLE_PATH` — Path to the [Validator Engine Console](https://github.com/ton-blockchain/ton/tree/master/validator-engine-console). Example:
 ```bash
 VALIDATOR_ENGINE_CONSOLE_PATH=/path/to/validator-engine-console
+```
+`VALIDATOR_SERVER_ADDRESS` — Address the validator’s server. Example:
+```bash
+VALIDATOR_SERVER_ADDRESS=127.0.0.1:4441
 ```
 
 #### Variables for Standalone Mode

@@ -6,6 +6,7 @@ import { DKGChannelContract } from "../contracts";
 
 export class TonService {
   protected readonly logger = new Logger(TonService.name);
+
   configService: ConfigService;
   tonClient: TonClient;
   tcDkgChannel: OpenedContract<DKGChannelContract>;
@@ -17,12 +18,12 @@ export class TonService {
       endpoint:
         this.configService.getOrThrow<string>("TON_CENTER_V2_ENDPOINT") +
         "/jsonRPC",
-      apiKey: this.configService.get("TON_CENTER_API_KEY"),
+      apiKey: this.configService.getOrThrow<string>("TON_CENTER_API_KEY"),
     });
 
     this.tcDkgChannel = this.tonClient.open(
       DKGChannelContract.createFromAddress(
-        Address.parse(this.configService.getOrThrow("DKG_CHANNEL")),
+        Address.parse(this.configService.getOrThrow("COORDINATOR")),
       ),
     );
   }
