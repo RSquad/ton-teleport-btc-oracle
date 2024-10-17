@@ -18,7 +18,7 @@ export class TonService {
       endpoint:
         this.configService.getOrThrow<string>("TON_CENTER_V2_ENDPOINT") +
         "/jsonRPC",
-      apiKey: this.configService.getOrThrow<string>("TON_CENTER_API_KEY"),
+      apiKey: this.configService.get<string | undefined>("TON_CENTER_API_KEY"),
     });
 
     this.tcDkgChannel = this.tonClient.open(
