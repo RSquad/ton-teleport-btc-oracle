@@ -1,45 +1,45 @@
-import { Dictionary } from "@ton/core";
+import { Address, Dictionary } from "@ton/core";
 import { ConfigService } from "../base/config.service";
 import { Logger } from "../base/logger.service";
-import { PegoutTxContract } from "../contracts";
+import { DKGChannelContract, PegoutTxContract, type TDKG } from "../contracts";
 import type { TPegoutRecord } from "../contracts";
 import { DkgService } from "../dkg/dkg.service";
 import { KeystoreService } from "../keystore/keystore.service";
 import { TonService } from "../ton/ton.service";
+import type { OpenedContract } from "@ton/ton";
+import type {
+  TValidatorKey,
+  ValidatorService,
+} from "../ton/validator.service.ts";
 const frost = require("frost.node");
 
 export class SignService {
   private readonly logger = new Logger(SignService.name);
-  private identifier: Buffer;
   private inProgress: boolean;
-  private minSigners: number;
-  private pubkey: string;
   private tonService: TonService;
   private dkgService: DkgService;
   private configService: ConfigService;
   private keyStore: KeystoreService;
+  private tcCoordinator: OpenedContract<DKGChannelContract>;
+  private validatorService: ValidatorService;
 
   constructor(
     configService: ConfigService,
     dkgService: DkgService,
     tonService: TonService,
     keyStore: KeystoreService,
+    validatorService: ValidatorService,
   ) {
     this.tonService = tonService;
     this.configService = configService;
     this.dkgService = dkgService;
     this.keyStore = keyStore;
-
+    this.validatorService = validatorService;
     this.inProgress = false;
-    this.minSigners = +this.configService.getOrThrow<number>(
-      "STANDALONE_MIN_SIGNERS",
-    );
-    this.pubkey = this.configService.getOrThrow<string>(
-      "STANDALONE_VALIDATOR_PUBKEY",
-    );
-    this.identifier = Buffer.from(
-      frost.deriveIdentifier(Buffer.from(this.pubkey, "hex")),
-      "hex",
+    this.tcCoordinator = this.tonService.tonClient.open(
+      DKGChannelContract.createFromAddress(
+        Address.parse(this.configService.getOrThrow("COORDINATOR")),
+      ),
     );
   }
 
@@ -57,15 +57,21 @@ export class SignService {
     try {
       this.inProgress = true;
       this.logger.log("Cron Job started.");
-      await this.execute();
+
+      let dkg = await this.tonService.tcDkgChannel.getPrevDKG();
+      if (!dkg) {
+        this.logger.log("DKG not yet completed.");
+        return;
+      }
+
+      await this.execute(dkg);
     } finally {
       this.logger.log("Cron Job completed.");
       this.inProgress = false;
     }
   }
-  private async execute() {
-    const pegoutRecords =
-      await this.tonService.tcDkgChannel.getUnsignedPegouts();
+  private async execute(dkg: TDKG) {
+    const pegoutRecords = await this.tcCoordinator.getUnsignedPegouts();
     if (!pegoutRecords?.size) {
       this.logger.log("No sign requests.");
       return;
@@ -76,36 +82,47 @@ export class SignService {
     const pegoutTxId = pegoutRecords.keys()[0];
     const pegoutTx: TPegoutRecord = pegoutRecords.get(pegoutTxId)!;
     this.logger.log(pegoutTxId);
-    this.logger.log(pegoutTx.pegoutAddress.toRawString());
+    this.logger.log(pegoutTx.pegoutAddress);
 
-    const validatorIdx = await this.tonService.tcDkgChannel.getValidatorIdx({
-      pubkey: this.pubkey,
-    });
-    if (validatorIdx == undefined) {
-      this.logger.error(
-        `Oracle is not a validator and cannot participate in signing pegout ${pegoutTxId.toString(16)}`,
+    const valKey = await this.validatorService.getValidatorKey(dkg);
+    if (!valKey) {
+      this.logger.warn(
+        `Oracle is not a validator. Cannot participate in signing pegout ${pegoutTxId.toString(16)}`,
       );
       return;
     }
 
+    await this.tcCoordinator.connect(
+      this.validatorService.getSigner(valKey.valdiatorKey),
+    );
+
+    const minSigners = Math.floor((dkg.maxSigners * 2) / 3);
     try {
-      (await this.doCommit(validatorIdx, pegoutTxId, pegoutTx)) &&
-        (await this.doSign(validatorIdx, pegoutTxId, pegoutTx)) &&
-        (await this.doAggregate(validatorIdx, pegoutTxId, pegoutTx));
+      (await this.doCommit(valKey, pegoutTxId, pegoutTx, minSigners)) &&
+        (await this.doSign(valKey, pegoutTxId, pegoutTx, minSigners)) &&
+        (await this.doAggregate(valKey, pegoutTxId, pegoutTx));
     } catch (error: any) {
       this.logger.log(error?.response?.data || error, error?.stack);
     }
   }
 
   private async doCommit(
-    validatorIdx: number,
+    validatorKey: TValidatorKey,
     pegoutId: number,
     pegoutRecord: TPegoutRecord,
+    minSigners: number,
   ): Promise<boolean> {
     this.logger.log(`Commit pegout ${pegoutId.toString(16)}`);
+    const identifier = validatorKey.valdiatorKey;
+
     const pegoutAddressStr = pegoutRecord.pegoutAddress.toString();
 
-    const isCommitSent = !!pegoutRecord.commitments.get(this.identifier);
+    const isCommitSent = !!pegoutRecord.commitments.get(identifier);
+
+    const pegoutTxContract = this.tonService.tonClient.open(
+      PegoutTxContract.createFromAddress(pegoutRecord.pegoutAddress),
+    );
+    const { internalKey } = await pegoutTxContract.getTxParts();
 
     if (!isCommitSent) {
       let nonce = this.keyStore.loadTemp(`nonce_${pegoutAddressStr}`);
@@ -116,7 +133,7 @@ export class SignService {
 
       if (!nonce || !commitments) {
         if (!nonce && !commitments) {
-          const commitResult = await this.dkgService.commit();
+          const commitResult = await this.dkgService.commit(internalKey);
           nonce = commitResult.nonce;
           commitments = commitResult.commitments;
           this.keyStore.storeTemp(
@@ -135,16 +152,16 @@ export class SignService {
         }
       }
 
-      await this.dkgService.sendCommitments({
+      await this.tcCoordinator.sendCommitments({
         pegoutId,
-        validatorIdx,
-        identifier: this.identifier,
+        validatorIdx: validatorKey.validatorIdx,
+        identifier,
         commitments: commitments,
         lifetime: 30,
       });
       this.logger.log(`Commit sent for pegout ${pegoutId.toString(16)}`);
     } else {
-      if (pegoutRecord.commitments.size >= this.minSigners) {
+      if (pegoutRecord.commitments.size >= minSigners) {
         this.logger.log(
           `Moving to signing phase for pegout ${pegoutId.toString(16)}`,
         );
@@ -155,13 +172,16 @@ export class SignService {
   }
 
   private async doSign(
-    validatorIdx: number,
+    validatorKey: TValidatorKey,
     pegoutId: number,
     pegoutRecord: TPegoutRecord,
+    minSigners: number,
   ): Promise<boolean> {
     this.logger.log(`Sign pegout ${pegoutId.toString(16)}`);
+    const identifier = validatorKey.valdiatorKey;
+
     const pegoutAddressStr = pegoutRecord.pegoutAddress.toString();
-    const isCommitSent = !!pegoutRecord.commitments.get(this.identifier);
+    const isCommitSent = !!pegoutRecord.commitments.get(identifier);
     const pegoutTxContract = this.tonService.tonClient.open(
       PegoutTxContract.createFromAddress(pegoutRecord.pegoutAddress),
     );
@@ -189,7 +209,7 @@ export class SignService {
       return false;
     }
 
-    const { inputs } = await pegoutTxContract.getTxParts();
+    const { inputs, internalKey } = await pegoutTxContract.getTxParts();
     const inputTxids = inputs.keys().sort((a, b) => (a - b >= 0 ? 1 : -1));
 
     let signPkgs = this.keyStore.loadTempArray(`pkgs_${pegoutAddressStr}`);
@@ -208,7 +228,7 @@ export class SignService {
     }
 
     const shares = pegoutRecord.signingShares;
-    const isShareSent = !!shares.get(this.identifier);
+    const isShareSent = !!shares.get(identifier);
     if (!isShareSent) {
       let signShares = this.keyStore.loadTempArray(
         `shares_${pegoutAddressStr}`,
@@ -220,24 +240,28 @@ export class SignService {
         }
         signShares = [];
         for (let i = 0; i < signHashes.length; i++) {
-          const signShare = await this.dkgService.sign(signPkgs[i], nonce);
+          const signShare = await this.dkgService.sign(
+            internalKey,
+            signPkgs[i],
+            nonce,
+          );
           signShares.push(signShare);
         }
         this.keyStore.storeTempArray(`shares_${pegoutAddressStr}`, signShares);
       }
 
-      await this.dkgService.sendSigningShare({
+      await this.tcCoordinator.sendSigningShare({
         pegoutId,
-        validatorIdx,
-        identifier: this.identifier,
+        validatorIdx: validatorKey.validatorIdx,
+        identifier,
         signingShares: signShares,
         lifetime: 30,
       });
-      this.logger.log(`Signing share sent for pegout${pegoutId.toString(16)}`);
+      this.logger.log(`Signing share sent for pegout ${pegoutId.toString(16)}`);
     } else {
-      if (shares.size >= this.minSigners) {
+      if (shares.size >= minSigners) {
         this.logger.log(
-          `Moving to aggregation phase for pegout${pegoutId.toString(16)}`,
+          `Moving to aggregation phase for pegout ${pegoutId.toString(16)}`,
         );
         return true;
       }
@@ -246,19 +270,23 @@ export class SignService {
   }
 
   private async doAggregate(
-    validatorIdx: number,
+    validatorKey: TValidatorKey,
     pegoutId: number,
     pegoutRecord: TPegoutRecord,
   ): Promise<boolean> {
     this.logger.log(
       `Aggregate sign shares for pegout ${pegoutId.toString(16)}`,
     );
+    const identifier = validatorKey.valdiatorKey;
+
     const pegoutTxContract = this.tonService.tonClient.open(
       PegoutTxContract.createFromAddress(pegoutRecord.pegoutAddress),
     );
 
-    const isSignatureExists = !!(await pegoutTxContract.getTxParts()).signatures
-      .length;
+    const { signatures: pegoutSignatures } =
+      await pegoutTxContract.getTxParts();
+    const pubkeyPackage = await this.tcCoordinator.getPubkeyPackage();
+    const isSignatureExists = !!pegoutSignatures.length;
     if (isSignatureExists) {
       this.logger.log("Completed. Signature already exists.");
       return true;
@@ -283,7 +311,7 @@ export class SignService {
         });
       }
     }
-    const localPubkeyPackage = this.dkgService.localPubkeyPackage;
+
     const signatures: Buffer[] = [];
     let signPkgs = this.keyStore.loadTempArray(
       `pkgs_${pegoutRecord.pegoutAddress.toString()}`,
@@ -297,15 +325,15 @@ export class SignService {
       const signature = await frost.aggregate(
         signPkg,
         sharesArr.filter((share) => +("0x" + share.index) === i),
-        localPubkeyPackage,
+        pubkeyPackage,
       );
       signatures.push(signature);
     }
 
-    await this.tonService.tcDkgChannel.sendSignatures({
+    await this.tcCoordinator.sendSignatures({
       pegoutId,
-      validatorIdx,
-      identifier: this.identifier,
+      validatorIdx: validatorKey.validatorIdx,
+      identifier,
       signatures,
       lifetime: 30,
     });

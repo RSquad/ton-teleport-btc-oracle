@@ -61,7 +61,7 @@ export class FileStrategy implements KeystoreStrategyInterface {
         }
       }
 
-      fs.writeFileSync(filepath, secret, { flag: "w+" });
+      fs.writeFileSync(filepath, secret as any, { flag: "w+" });
       cache.set(filename, secret);
 
       return true;

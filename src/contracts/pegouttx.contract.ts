@@ -15,7 +15,6 @@ import {
 import { bigIntToBuf, splitBufferToCells, writeCellsToBuffer } from "./common";
 import { OpCodes } from "./constants";
 import {
-  type ISigner,
   type TTeleportOutput,
   type TTeleportUtxo,
   txidKey,
@@ -29,7 +28,7 @@ export type PegoutTxConfig = {
   teleportAddress: Address;
 };
 function serializeScript(script: Buffer): Buffer {
-  return Buffer.concat([Buffer.alloc(1, script.length), script]);
+  return Buffer.concat([Buffer.alloc(1, script.length), script as any]);
 }
 
 export function pegoutTxConfigToCell(config: PegoutTxConfig): Cell {
@@ -46,7 +45,6 @@ export class PegoutTxContract implements Contract {
   constructor(
     readonly address: Address,
     readonly init?: { code: Cell; data: Cell },
-    readonly signer?: ISigner,
   ) {}
 
   static RefValue: DictionaryValue<Buffer> = {
@@ -58,19 +56,14 @@ export class PegoutTxContract implements Contract {
     },
   };
 
-  static createFromAddress(address: Address, signer?: ISigner) {
-    return new PegoutTxContract(address, undefined, signer);
+  static createFromAddress(address: Address) {
+    return new PegoutTxContract(address, undefined);
   }
 
-  static createFromConfig(
-    config: PegoutTxConfig,
-    code: Cell,
-    workchain = 0,
-    signer?: ISigner,
-  ) {
+  static createFromConfig(config: PegoutTxConfig, code: Cell, workchain = 0) {
     const data = pegoutTxConfigToCell(config);
     const init = { code, data };
-    return new PegoutTxContract(contractAddress(workchain, init), init, signer);
+    return new PegoutTxContract(contractAddress(workchain, init), init);
   }
 
   async sendDeploy(
@@ -158,30 +151,4 @@ export class PegoutTxContract implements Contract {
       internalKey,
     };
   }
-
-  //
-  // Private methods
-  //
-
-  // private async buildExternalMessage(signBody: Cell): Promise<Cell> {
-  //   const signature = this.signer
-  //     ? ((await this.signer?.signCell(signBody)) as Buffer)
-  //     : randomBytes(64);
-  //   const body = beginCell()
-  //     .storeBuffer(signature, 64)
-  //     .storeSlice(signBody.asSlice())
-  //     .endCell();
-  //   const message: Message = {
-  //     info: {
-  //       type: "external-in",
-  //       dest: this.address,
-  //       importFee: 0n,
-  //     },
-  //     body,
-  //   };
-  //   const cell = beginCell();
-  //   const store = storeMessage(message);
-  //   store(cell);
-  //   return cell.endCell();
-  // }
 }

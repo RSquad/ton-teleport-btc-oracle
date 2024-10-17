@@ -84,10 +84,6 @@ export enum NetworkName {
   TESTNET,
 }
 
-export interface ISigner {
-  signCell(cell: Cell): Promise<Buffer>;
-}
-
 export const txidKey: DictionaryKey<bigint> = Dictionary.Keys.BigUint(256);
 export const utxoValue: DictionaryValue<TTeleportUtxo> = {
   serialize: (src: TTeleportUtxo, builder: Builder) => {
@@ -109,10 +105,49 @@ export const utxoValue: DictionaryValue<TTeleportUtxo> = {
       script: ref.loadBuffer(ref.remainingBits / 8),
     };
 
-    if (data.taprootMerkleRoot?.equals(Buffer.alloc(32))) {
+    if (data.taprootMerkleRoot?.equals(Buffer.alloc(32) as any)) {
       data.taprootMerkleRoot = undefined;
     }
 
     return data;
   },
+};
+
+export enum DkgState {
+  FINISHED = 0,
+  IN_PROGRESS = 1,
+  PART1_FINISHED = 2,
+  PART2_FINISHED = 3,
+}
+
+export type TR1Package = {
+  mask: bigint;
+  count: number;
+  packages: Dictionary<Buffer, Buffer>;
+};
+
+export type TR2Package = {
+  mask: bigint;
+  count: number;
+  packages: Dictionary<Buffer, Dictionary<Buffer, Buffer>>;
+};
+
+export type TDKG = {
+  state: DkgState;
+  vset: Dictionary<number, Buffer>;
+  maxSigners: number;
+  r1Packages: TR1Package;
+  r2Packages: TR2Package;
+  cfgHash: Buffer;
+  attempts: number;
+  timeout: number;
+  pubkeyPackage?: Buffer;
+};
+
+export type TDKGChannelConfig = {
+  id: number;
+  dkg?: TDKG;
+  prevDKG?: TDKG;
+  pegouts?: Dictionary<Buffer, TPegoutRecord>;
+  pegoutTxCode: Cell;
 };
