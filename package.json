@@ -1,10 +1,10 @@
 {
-  "name": "@ton-teleport/oracle",
-  "version": "0.0.3",
+  "name": "@ton-teleport-btc/oracle",
+  "version": "0.0.4",
   "main": "src/index.ts",
   "type": "module",
   "scripts": {
-    "start": "bun build:frost && bun run src/index.ts",
+    "start": "bun run src/index.ts",
     "dev": "bun build:frost && bun run --watch src/index.ts",
     "build": "bun build:frost && bun build ./src/index.ts --outdir dist --target bun",
     "build:frost": "cargo-cp-artifact -nc ./frost.node -- cargo build --manifest-path ./frost/Cargo.toml --message-format=json-render-diagnostics",

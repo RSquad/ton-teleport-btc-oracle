@@ -26,7 +26,7 @@ export class FileStrategy implements KeystoreStrategyInterface {
     this.logger.log("SET tempDir:", this.tempDir);
 
     if (!fs.existsSync(this.dir)) {
-      fs.mkdirSync(this.dir);
+      fs.mkdirSync(this.dir, { recursive: true });
     }
     if (!fs.existsSync(this.storageDir)) {
       fs.mkdirSync(this.storageDir, { recursive: true });
