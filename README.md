@@ -1,4 +1,4 @@
-# @ton-teleport/oracle
+# @ton-teleport-btc/oracle
 
 This repository is an Oracle service designed for the TON blockchain, specifically as part of the TON Teleport BTC system.
 

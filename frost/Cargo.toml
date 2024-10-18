@@ -1,6 +1,6 @@
 [package]
 name = "oracle"
-version = "0.0.1"
+version = "0.0.4"
 authors = ["RSquad Blockchain Lab <admin@rsquad.io>"]
 edition = "2018"
 

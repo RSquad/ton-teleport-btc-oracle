@@ -1,6 +1,6 @@
 {
-  "name": "@ton-teleport/oracle",
-  "version": "0.0.3",
+  "name": "@ton-teleport-btc/oracle",
+  "version": "0.0.4",
   "main": "src/index.ts",
   "type": "module",
   "scripts": {
