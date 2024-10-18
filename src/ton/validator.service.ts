@@ -42,7 +42,7 @@ export class ValidatorService {
         return this.standalonePublicKey == publicKey.toString("hex");
       });
       validatorIdx = index >= 0 ? dkg.vset.keys()[index] : undefined;
-      validatorKey = Buffer.from(this.standalonePublicKey!);
+      validatorKey = Buffer.from(this.standalonePublicKey!, 'hex');
     } else {
       const validatorKeys = await this.validatorConsole!.getValidatorKeys();
       validatorKey = dkg.vset.values().find((vsetKey, i) => {
