@@ -92,16 +92,13 @@ export function buildVsetFromArray(
 
 export const ValidatorDescrValue: DictionaryValue<Buffer> = {
   serialize: (src: Buffer, builder: Builder) => {
-    builder.storeRef(
-      beginCell()
+    builder
         .storeUint(0x53, 8)
         .storeUint(ED25519_PUBKEY_TAG, 32)
-        .storeBuffer(src, 32)
-        .endCell(),
-    );
+        .storeBuffer(src, 32);
   },
   parse: (src: Slice): Buffer => {
-    const slice = src.loadRef().beginParse();
+    const slice = src;
     const tag = slice.loadUint(8);
     if ((tag & ~0x20) != 0x53) {
       throw "Invalid ValidatorDescr tag";

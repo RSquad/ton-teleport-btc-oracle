@@ -86,7 +86,7 @@ export class ValidatorEngineConsoleService implements IValidatorEngineConsole {
     const cfg = await this.getValidatorConfig();
     const validatorKeys: string[] = [];
     for (const val of cfg.validators) {
-      validatorKeys.push(await this.exportPub(val.id));
+        validatorKeys.push((await this.exportPub(val.id)).slice(8));
     }
     return validatorKeys;
   }
