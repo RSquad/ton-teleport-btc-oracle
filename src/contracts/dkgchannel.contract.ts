@@ -562,7 +562,7 @@ export class DKGChannelContract implements Contract {
   async getPubkeyPackage(
     provider: ContractProvider,
   ): Promise<Buffer | undefined> {
-    const dkg = await this.getDKG(provider);
+    const dkg = await this.getPrevDKG(provider);
     return dkg?.pubkeyPackage;
   }
 

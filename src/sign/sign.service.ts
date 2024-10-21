@@ -1,7 +1,7 @@
 import { Address, Dictionary } from "@ton/core";
 import { ConfigService } from "../base/config.service";
 import { Logger } from "../base/logger.service";
-import { DKGChannelContract, PegoutTxContract, type TDKG } from "../contracts";
+import { DKGChannelContract, DkgState, PegoutTxContract, type TDKG } from "../contracts";
 import type { TPegoutRecord } from "../contracts";
 import { DkgService } from "../dkg/dkg.service";
 import { KeystoreService } from "../keystore/keystore.service";
@@ -46,10 +46,6 @@ export class SignService {
   async init() {}
 
   async executeSign() {
-    if (!this.dkgService.isDkgCompleted()) {
-      this.logger.warn("DKG is not completed yet.");
-      return;
-    }
     if (this.inProgress) {
       this.logger.warn("Job is in progress.");
       return;
