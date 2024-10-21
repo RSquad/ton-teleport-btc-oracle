@@ -46,10 +46,6 @@ export class SignService {
   async init() {}
 
   async executeSign() {
-    // if (!this.dkgService.isDkgCompleted()) {
-    //   this.logger.warn("DKG is not completed yet.");
-    //   return;
-    // }
     if (this.inProgress) {
       this.logger.warn("Job is in progress.");
       return;
@@ -59,7 +55,7 @@ export class SignService {
       this.logger.log("Cron Job started.");
 
       let dkg = await this.tonService.tcDkgChannel.getPrevDKG();
-      if (!dkg || !(dkg.state === DkgState.FINISHED)) {
+      if (!dkg) {
         this.logger.log("DKG not yet completed.");
         return;
       }
