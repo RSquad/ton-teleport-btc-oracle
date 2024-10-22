@@ -14,6 +14,13 @@ enum CronExpression {
 async function main() {
   const configService = new ConfigService();
   const tonService = new TonService(configService);
+
+  const coordinatorStandaloneMode = await tonService.tcCoordinator.getStandaloneMode();
+  const standaloneMode = configService.getOrThrow<number>("STANDALONE");
+  if (coordinatorStandaloneMode !== standaloneMode) {
+    throw Error(`Coordinator and oracle have different modes: ${coordinatorStandaloneMode} ${standaloneMode}`);
+  }
+
   const secretRootDir = configService.getOrThrow<string>("KEYSTORE_DIR");
   const keyStore = new KeystoreService(StrategyEnum.FILE, secretRootDir);
   const validatorService = new ValidatorService(configService);
