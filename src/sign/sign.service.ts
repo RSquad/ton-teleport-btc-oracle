@@ -1,7 +1,7 @@
 import { Address, Dictionary } from "@ton/core";
 import { ConfigService } from "../base/config.service";
 import { Logger } from "../base/logger.service";
-import { DKGChannelContract, DkgState, PegoutTxContract, type TDKG } from "../contracts";
+import { DKGChannelContract, PegoutTxContract, type TDKG } from "../contracts";
 import type { TPegoutRecord } from "../contracts";
 import { DkgService } from "../dkg/dkg.service";
 import { KeystoreService } from "../keystore/keystore.service";
@@ -89,7 +89,7 @@ export class SignService {
     }
 
     await this.tcCoordinator.connect(
-      this.validatorService.getSigner(valKey.validatorKey),
+      this.validatorService.getSigner(valKey.validatorId),
     );
 
     const minSigners = Math.floor((dkg.maxSigners * 2) / 3);

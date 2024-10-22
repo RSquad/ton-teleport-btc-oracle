@@ -113,7 +113,7 @@ export class DkgService {
     }
 
     await this.tcCoordinator.connect(
-      this.validatorService.getSigner(key!.validatorKey),
+      this.validatorService.getSigner(key!.validatorId),
     );
 
     const validatorIdx = key!.validatorIdx;

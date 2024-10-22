@@ -6,6 +6,7 @@ import { ValidatorEngineConsoleService } from "./validator-engine-console.servic
 export type TValidatorKey = {
   validatorIdx: number;
   validatorKey: Buffer;
+  validatorId: Buffer;
 };
 export class ValidatorService {
   private validatorConsole?: ValidatorEngineConsoleService;
@@ -36,21 +37,24 @@ export class ValidatorService {
   async getValidatorKey(dkg: TDKG): Promise<TValidatorKey | undefined> {
     let validatorIdx: number | undefined = undefined;
     let validatorKey: Buffer | undefined = undefined;
+    let validatorId: Buffer | undefined = undefined;
 
     if (this.standaloneMode) {
       const index = dkg.vset.values().findIndex((publicKey) => {
         return this.standalonePublicKey == publicKey.toString("hex");
       });
       validatorIdx = index >= 0 ? dkg.vset.keys()[index] : undefined;
-      validatorKey = Buffer.from(this.standalonePublicKey!, 'hex');
+      validatorKey = Buffer.from(this.standalonePublicKey!, "hex");
+      validatorId = validatorKey;
     } else {
       const validatorKeys = await this.validatorConsole!.getValidatorKeys();
       validatorKey = dkg.vset.values().find((vsetKey, i) => {
-        const found = validatorKeys.validatorIds.includes(
+        const found = validatorKeys.validatorKeys.includes(
           vsetKey.toString("hex"),
         );
         if (found) {
           validatorIdx = dkg.vset.keys()[i];
+          validatorId = Buffer.from(validatorKeys.validatorIds[i], "hex");
         }
         return found;
       });
@@ -62,6 +66,7 @@ export class ValidatorService {
     return {
       validatorIdx: validatorIdx!,
       validatorKey: validatorKey!,
+      validatorId: validatorId!,
     };
   }
 
