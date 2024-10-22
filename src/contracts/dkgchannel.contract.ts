@@ -58,6 +58,7 @@ function storeDKGToCell(dkg?: TDKG) {
 function dKGChannelConfigToCell(config: TDKGChannelConfig): Cell {
   return beginCell()
     .storeUint(0, 1) // initialized?
+    .storeBit(config.standaloneMode)
     .storeUint(config.id, 32)
     .storeMaybeRef(storeDKGToCell(config.dkg))
     .storeMaybeRef(storeDKGToCell(config.prevDKG))
@@ -479,6 +480,12 @@ export class DKGChannelContract implements Contract {
   //
   // Public getters
   //
+
+  async getStandaloneMode(provider: ContractProvider) {
+    const result = await provider.get("get_standalone_mode", []);
+    const standaloneMode = result.stack.readNumber();
+    return standaloneMode;
+  }
 
   async getDKG(provider: ContractProvider) {
     const result = await provider.get("get_dkg", []);
