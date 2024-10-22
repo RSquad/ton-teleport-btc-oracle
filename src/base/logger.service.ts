@@ -31,6 +31,7 @@ export class Logger {
   }
 
   debug(message: any, ...optionalParams: any[]) {
+    message = this.context ? `[${this.context}]: ${message}` : message;
     this.call("debug", message, ...optionalParams);
   }
 
@@ -72,7 +73,6 @@ export class Logger {
       objArg["err"].stack = params[0];
       this.logger[level](objArg);
     } else {
-      message = this.context ? `[${this.context}]: ${message}` : message;
       this.logger[level](objArg, message, ...params);
     }
   }
