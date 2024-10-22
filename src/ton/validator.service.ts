@@ -5,7 +5,7 @@ import { ValidatorEngineConsoleService } from "./validator-engine-console.servic
 
 export type TValidatorKey = {
   validatorIdx: number;
-  valdiatorKey: Buffer;
+  validatorKey: Buffer;
 };
 export class ValidatorService {
   private validatorConsole?: ValidatorEngineConsoleService;
@@ -46,7 +46,9 @@ export class ValidatorService {
     } else {
       const validatorKeys = await this.validatorConsole!.getValidatorKeys();
       validatorKey = dkg.vset.values().find((vsetKey, i) => {
-        const found = validatorKeys.includes(vsetKey.toString("hex"));
+        const found = validatorKeys.validatorIds.includes(
+          vsetKey.toString("hex"),
+        );
         if (found) {
           validatorIdx = dkg.vset.keys()[i];
         }
@@ -59,7 +61,7 @@ export class ValidatorService {
     }
     return {
       validatorIdx: validatorIdx!,
-      valdiatorKey: validatorKey!,
+      validatorKey: validatorKey!,
     };
   }
 

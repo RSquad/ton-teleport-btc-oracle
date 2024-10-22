@@ -113,11 +113,11 @@ export class DkgService {
     }
 
     await this.tcCoordinator.connect(
-      this.validatorService.getSigner(key!.valdiatorKey),
+      this.validatorService.getSigner(key!.validatorKey),
     );
 
     const validatorIdx = key!.validatorIdx;
-    const validatorPublicKey = key!.valdiatorKey.toString("hex");
+    const validatorPublicKey = key!.validatorKey.toString("hex");
     try {
       switch (this.dkgRound) {
         case DkgRound.R2_COMPLETED:

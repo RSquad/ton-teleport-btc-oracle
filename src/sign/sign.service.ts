@@ -89,7 +89,7 @@ export class SignService {
     }
 
     await this.tcCoordinator.connect(
-      this.validatorService.getSigner(valKey.valdiatorKey),
+      this.validatorService.getSigner(valKey.validatorKey),
     );
 
     const minSigners = Math.floor((dkg.maxSigners * 2) / 3);
@@ -109,7 +109,7 @@ export class SignService {
     minSigners: number,
   ): Promise<boolean> {
     this.logger.log(`Commit pegout ${pegoutId.toString(16)}`);
-    const identifier = validatorKey.valdiatorKey;
+    const identifier = validatorKey.validatorKey;
 
     const pegoutAddressStr = pegoutRecord.pegoutAddress.toString();
 
@@ -174,7 +174,7 @@ export class SignService {
     minSigners: number,
   ): Promise<boolean> {
     this.logger.log(`Sign pegout ${pegoutId.toString(16)}`);
-    const identifier = validatorKey.valdiatorKey;
+    const identifier = validatorKey.validatorKey;
 
     const pegoutAddressStr = pegoutRecord.pegoutAddress.toString();
     const isCommitSent = !!pegoutRecord.commitments.get(identifier);
@@ -273,7 +273,7 @@ export class SignService {
     this.logger.log(
       `Aggregate sign shares for pegout ${pegoutId.toString(16)}`,
     );
-    const identifier = validatorKey.valdiatorKey;
+    const identifier = validatorKey.validatorKey;
 
     const pegoutTxContract = this.tonService.tonClient.open(
       PegoutTxContract.createFromAddress(pegoutRecord.pegoutAddress),
