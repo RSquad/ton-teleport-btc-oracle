@@ -146,6 +146,7 @@ export type TDKG = {
 
 export type TDKGChannelConfig = {
   id: number;
+  standaloneMode: boolean;
   dkg?: TDKG;
   prevDKG?: TDKG;
   pegouts?: Dictionary<Buffer, TPegoutRecord>;
