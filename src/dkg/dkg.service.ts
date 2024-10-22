@@ -1,6 +1,6 @@
 import { ConfigService } from "../base/config.service";
 import { Logger } from "../base/logger.service";
-import { DKGChannelContract, DkgState, type TDKG } from "../contracts";
+import { CoordinatorContract, DkgState, type TDKG } from "../contracts";
 import { KeystoreService } from "../keystore/keystore.service";
 import { TonService } from "../ton/ton.service";
 import type { OpenedContract } from "@ton/ton";
@@ -40,7 +40,7 @@ export class DkgService {
   private configService: ConfigService;
   private tonService: TonService;
   private keyStore: KeystoreService;
-  private tcCoordinator: OpenedContract<DKGChannelContract>;
+  private tcCoordinator: OpenedContract<CoordinatorContract>;
   private validatorService: ValidatorService;
 
   constructor(
@@ -57,7 +57,7 @@ export class DkgService {
     this.inProgress = false;
     this.dkgRound = DkgRound.NOT_STARTED;
     this.tcCoordinator = this.tonService.tonClient.open(
-      DKGChannelContract.createFromAddress(
+      CoordinatorContract.createFromAddress(
         Address.parse(this.configService.getOrThrow("COORDINATOR")),
       ),
     );
@@ -74,13 +74,13 @@ export class DkgService {
     this.logger.log("DKG job started.");
 
     try {
-      await this.tonService.tcDkgChannel.sendStartDKG();
+      await this.tonService.tcCoordinator.sendStartDKG();
     } catch (e) {
       this.logger.debug(e);
     }
 
     try {
-      let dkg = await this.tonService.tcDkgChannel.getDKG();
+      let dkg = await this.tonService.tcCoordinator.getDKG();
       if (!dkg) {
         this.logger.log("DKG not yet started.");
         return;
