@@ -5,6 +5,7 @@ import {
   type IValidatorEngineConsole,
   type ValidatorEngineCommand,
   type ValidatorEngineConfig,
+  type ValidatorKeysResponse,
 } from "./types";
 
 export class ValidatorEngineConsoleService implements IValidatorEngineConsole {
@@ -82,13 +83,16 @@ export class ValidatorEngineConsoleService implements IValidatorEngineConsole {
     return this.extractJson(result!);
   }
 
-  public async getValidatorKeys(): Promise<string[]> {
+  public async getValidatorKeys(): Promise<ValidatorKeysResponse> {
     const cfg = await this.getValidatorConfig();
-    const validatorKeys: string[] = [];
+    const validatorKeys: any = [];
+    const validatorIds: any = [];
     for (const val of cfg.validators) {
-        validatorKeys.push((await this.exportPub(val.id)).slice(8));
+      const valId = await this.exportPub(val.id);
+      validatorKeys.push(valId.slice(8));
+      validatorIds.push(this._base64ToHex(val.id));
     }
-    return validatorKeys;
+    return { validatorKeys, validatorIds };
   }
 
   private _buildCommand(
