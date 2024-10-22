@@ -16,7 +16,7 @@ async function main() {
   const tonService = new TonService(configService);
 
   const coordinatorStandaloneMode = await tonService.tcCoordinator.getStandaloneMode();
-  const standaloneMode = configService.getOrThrow<number>("STANDALONE");
+  const standaloneMode = +configService.getOrThrow("STANDALONE");
   if (coordinatorStandaloneMode !== standaloneMode) {
     throw Error(`Coordinator and oracle have different modes: ${coordinatorStandaloneMode} ${standaloneMode}`);
   }
