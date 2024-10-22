@@ -1,7 +1,7 @@
 import { Address, Dictionary } from "@ton/core";
 import { ConfigService } from "../base/config.service";
 import { Logger } from "../base/logger.service";
-import { DKGChannelContract, PegoutTxContract, type TDKG } from "../contracts";
+import { CoordinatorContract, DkgState, PegoutTxContract, type TDKG } from "../contracts";
 import type { TPegoutRecord } from "../contracts";
 import { DkgService } from "../dkg/dkg.service";
 import { KeystoreService } from "../keystore/keystore.service";
@@ -20,7 +20,7 @@ export class SignService {
   private dkgService: DkgService;
   private configService: ConfigService;
   private keyStore: KeystoreService;
-  private tcCoordinator: OpenedContract<DKGChannelContract>;
+  private tcCoordinator: OpenedContract<CoordinatorContract>;
   private validatorService: ValidatorService;
 
   constructor(
@@ -37,7 +37,7 @@ export class SignService {
     this.validatorService = validatorService;
     this.inProgress = false;
     this.tcCoordinator = this.tonService.tonClient.open(
-      DKGChannelContract.createFromAddress(
+      CoordinatorContract.createFromAddress(
         Address.parse(this.configService.getOrThrow("COORDINATOR")),
       ),
     );
@@ -54,7 +54,7 @@ export class SignService {
       this.inProgress = true;
       this.logger.log("Cron Job started.");
 
-      let dkg = await this.tonService.tcDkgChannel.getPrevDKG();
+      let dkg = await this.tonService.tcCoordinator.getPrevDKG();
       if (!dkg) {
         this.logger.log("DKG not yet completed.");
         return;

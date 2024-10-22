@@ -22,7 +22,7 @@ import { PegoutTxContract } from "./pegouttx.contract";
 import {
   DkgState,
   type TDKG,
-  type TDKGChannelConfig,
+  type TCoordinatorConfig,
   type TPegoutRecord,
 } from "./types";
 
@@ -55,7 +55,7 @@ function storeDKGToCell(dkg?: TDKG) {
     .endCell();
 }
 
-function dKGChannelConfigToCell(config: TDKGChannelConfig): Cell {
+function coordinatorConfigToCell(config: TCoordinatorConfig): Cell {
   return beginCell()
     .storeUint(0, 1) // initialized?
     .storeBit(config.standaloneMode)
@@ -112,7 +112,7 @@ export const ValidatorDescrValue: DictionaryValue<Buffer> = {
   },
 };
 
-export class DKGChannelContract implements Contract {
+export class CoordinatorContract implements Contract {
   private signer?: ISigner | undefined;
   constructor(
     readonly address: Address,
@@ -151,13 +151,13 @@ export class DKGChannelContract implements Contract {
       const commitmentMask = slice.loadBuffer(32);
       slice.loadUint(16);
       const commitmentsDict = slice.loadDict(
-        DKGChannelContract.identifierKey,
-        DKGChannelContract.packageValue,
+        CoordinatorContract.identifierKey,
+        CoordinatorContract.packageValue,
       );
       const signSharesMask = slice.loadBuffer(32);
       slice.loadUint(16);
       const signingSharesDict = slice.loadDict(
-        DKGChannelContract.identifierKey,
+        CoordinatorContract.identifierKey,
         Dictionary.Values.Cell(),
       );
 
@@ -177,32 +177,32 @@ export class DKGChannelContract implements Contract {
         .storeUint(0, 256)
         .storeDict(
           src,
-          DKGChannelContract.identifierKey,
-          DKGChannelContract.packageValue,
+          CoordinatorContract.identifierKey,
+          CoordinatorContract.packageValue,
         );
     },
     parse: (src: Slice): Dictionary<Buffer, Buffer> => {
       src.loadUint(256);
       return src.loadDict(
-        DKGChannelContract.identifierKey,
-        DKGChannelContract.packageValue,
+        CoordinatorContract.identifierKey,
+        CoordinatorContract.packageValue,
       );
     },
   };
 
   static createFromAddress(address: Address, signer?: ISigner) {
-    return new DKGChannelContract(address, signer ?? undefined);
+    return new CoordinatorContract(address, signer ?? undefined);
   }
 
   static createFromConfig(
-    config: TDKGChannelConfig,
+    config: TCoordinatorConfig,
     code: Cell,
     workchain = 0,
     signer: ISigner,
   ) {
-    const data = dKGChannelConfigToCell(config);
+    const data = coordinatorConfigToCell(config);
     const init = { code, data };
-    return new DKGChannelContract(
+    return new CoordinatorContract(
       contractAddress(workchain, init),
       signer,
       init,
@@ -225,7 +225,7 @@ export class DKGChannelContract implements Contract {
       value,
       sendMode: SendMode.PAY_GAS_SEPARATELY,
       body: beginCell()
-        .storeUint(OpCodes.DKG_CHANNEL_INITIALIZE, 32)
+        .storeUint(OpCodes.COORDINATOR_INITIALIZE, 32)
         .storeAddress(opts.teleportAddress)
         .endCell(),
     });
@@ -253,7 +253,7 @@ export class DKGChannelContract implements Contract {
       throw "identifier must be 32 bytes length";
     }
     const signBody = beginCell()
-      .storeUint(OpCodes.DKGCHANNEL_ROUND1, 32)
+      .storeUint(OpCodes.COORDINATOR_ROUND1, 32)
       .storeUint(Math.floor(Date.now() / 1000) + (opts.lifetime ?? 30), 32)
       .storeUint(opts.validatorIdx, 16)
       .storeRef(
@@ -281,7 +281,7 @@ export class DKGChannelContract implements Contract {
       throw "identifier must be 32 bytes length";
     }
     const signBody = beginCell()
-      .storeUint(OpCodes.DKGCHANNEL_ROUND2, 32)
+      .storeUint(OpCodes.COORDINATOR_ROUND2, 32)
       .storeUint(Math.floor(Date.now() / 1000) + (opts.lifetime ?? 30), 32)
       .storeUint(opts.validatorIdx, 16)
       .storeRef(
@@ -309,7 +309,7 @@ export class DKGChannelContract implements Contract {
       throw "Internal key must be 65 bytes and has prefix 0x04";
 
     const signBody = beginCell()
-      .storeUint(OpCodes.DKGCHANNEL_ROUND3, 32)
+      .storeUint(OpCodes.COORDINATOR_ROUND3, 32)
       .storeUint(Math.floor(Date.now() / 1000) + (opts.lifetime ?? 30), 32)
       .storeUint(opts.validatorIdx, 16)
       .storeRef(
@@ -508,13 +508,13 @@ export class DKGChannelContract implements Contract {
     const maxSigners = dkgSlice.loadUint(16);
     const r1PackageParams = this.parsePackage(dkgSlice);
     const r1PackageDict = dkgSlice.loadDict(
-      DKGChannelContract.identifierKey,
-      DKGChannelContract.packageValue,
+      CoordinatorContract.identifierKey,
+      CoordinatorContract.packageValue,
     );
     const r2PackageParams = this.parsePackage(dkgSlice);
     const r2PackageDict = dkgSlice.loadDict(
-      DKGChannelContract.identifierKey,
-      DKGChannelContract.packageDictionaryValue,
+      CoordinatorContract.identifierKey,
+      CoordinatorContract.packageDictionaryValue,
     );
     const cfgHash = dkgSlice.loadBuffer(32);
     const attempts = dkgSlice.loadUint(8);
@@ -726,8 +726,8 @@ export class DKGChannelContract implements Contract {
     const dict = cell
       ?.beginParse()
       .loadDictDirect(
-        DKGChannelContract.pegoutRecordKey,
-        DKGChannelContract.pegoutRecordValue,
+        CoordinatorContract.pegoutRecordKey,
+        CoordinatorContract.pegoutRecordValue,
       );
     return dict;
   }

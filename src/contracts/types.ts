@@ -144,7 +144,7 @@ export type TDKG = {
   pubkeyPackage?: Buffer;
 };
 
-export type TDKGChannelConfig = {
+export type TCoordinatorConfig = {
   id: number;
   standaloneMode: boolean;
   dkg?: TDKG;
