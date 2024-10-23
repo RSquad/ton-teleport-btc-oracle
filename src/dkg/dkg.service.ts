@@ -145,7 +145,7 @@ export class DkgService {
       return;
     }
 
-    const onchainPubkeyPackage = dkg.pubkeyPackage;
+    const onchainPubkeyPackage = dkg.pubkeyPackages.get(Buffer.from(identifier, 'hex'));
     let pubkeyPkg = onchainPubkeyPackage;
     if (!(pubkeyPkg && this.loadSecretPackage(pubkeyPkg))) {
       // to generate secret package, r2 secret must be present.
@@ -167,6 +167,7 @@ export class DkgService {
         await frost.fromPublicKeyPackage(pubkeyPkg);
       const internalKeyXY = verifyingKey;
       await this.tcCoordinator.sendPubkeyPackage({
+        identifier: Buffer.from(identifier, 'hex'),
         validatorIdx,
         pubkeyPackage: pubkeyPkg,
         internalKeyXY,
@@ -329,11 +330,5 @@ export class DkgService {
       nonce: result.signingNonce,
       commitments: result.signingCommitments,
     };
-  }
-
-  public async getCommitsMap(pegoutTxId: number) {
-    return this.tcCoordinator.getCommitsMap({
-      pegoutTxId: pegoutTxId,
-    });
   }
 }

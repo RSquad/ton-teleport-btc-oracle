@@ -49,9 +49,8 @@ function storeDKGToCell(dkg?: TDKG) {
     .storeBuffer(dkg.cfgHash, 32)
     .storeUint(dkg.attempts, 8)
     .storeUint(dkg.timeout, 32)
-    .storeMaybeRef(
-      dkg.pubkeyPackage ? splitBufferToCells(dkg.pubkeyPackage) : null,
-    )
+    .storeUint(dkg.count, 16)
+    .storeDict(dkg.pubkeyPackages)
     .endCell();
 }
 
@@ -70,23 +69,15 @@ export const ED25519_PUBKEY_TAG = 0x8e81278a;
 export function buildVsetFromArray(
   vset: Buffer[],
   count: number,
-): Dictionary<number, Cell> {
+): Dictionary<number, Buffer> {
   if (vset.length <= count) {
     throw Error(
       "Not anough validators. Change maxSigners or add more validators",
     );
   }
-  const dict = Dictionary.empty(
-    Dictionary.Keys.Uint(16),
-    Dictionary.Values.Cell(),
-  );
+  const dict = Dictionary.empty(Dictionary.Keys.Uint(16), ValidatorDescrValue);
   for (let i = 0; i < count; i++) {
-    const validator = beginCell()
-      .storeUint(0x53, 8)
-      .storeUint(ED25519_PUBKEY_TAG, 32)
-      .storeBuffer(vset[i], 32)
-      .endCell();
-    dict.set(i, validator);
+    dict.set(i, vset[i]);
   }
   return dict;
 }
@@ -94,9 +85,10 @@ export function buildVsetFromArray(
 export const ValidatorDescrValue: DictionaryValue<Buffer> = {
   serialize: (src: Buffer, builder: Builder) => {
     builder
-        .storeUint(0x53, 8)
-        .storeUint(ED25519_PUBKEY_TAG, 32)
-        .storeBuffer(src, 32);
+      .storeUint(0x53, 8)
+      .storeUint(ED25519_PUBKEY_TAG, 32)
+      .storeBuffer(src, 32)
+      .endCell();
   },
   parse: (src: Slice): Buffer => {
     const slice = src;
@@ -191,14 +183,14 @@ export class CoordinatorContract implements Contract {
   };
 
   static createFromAddress(address: Address, signer?: ISigner) {
-    return new CoordinatorContract(address, signer ?? undefined);
+    return new CoordinatorContract(address, signer);
   }
 
   static createFromConfig(
     config: TCoordinatorConfig,
     code: Cell,
     workchain = 0,
-    signer: ISigner,
+    signer?: ISigner,
   ) {
     const data = coordinatorConfigToCell(config);
     const init = { code, data };
@@ -303,6 +295,7 @@ export class CoordinatorContract implements Contract {
       validatorIdx: number;
       pubkeyPackage: Buffer;
       internalKeyXY: Buffer;
+      identifier: Buffer;
     },
   ) {
     if (opts.internalKeyXY.length != 65 && opts.internalKeyXY[0] != 0x04)
@@ -314,6 +307,7 @@ export class CoordinatorContract implements Contract {
       .storeUint(opts.validatorIdx, 16)
       .storeRef(
         beginCell()
+          .storeBuffer(opts.identifier, 32)
           .storeBuffer(opts.internalKeyXY.subarray(1, 65), 64)
           .storeRef(splitBufferToCells(opts.pubkeyPackage))
           .endCell(),
@@ -519,7 +513,11 @@ export class CoordinatorContract implements Contract {
     const cfgHash = dkgSlice.loadBuffer(32);
     const attempts = dkgSlice.loadUint(8);
     const timeout = dkgSlice.loadUint(32);
-    const packageCell = dkgSlice.loadMaybeRef();
+    const count = dkgSlice.loadUint(16);
+    const packagesDict = dkgSlice.loadDict(
+      CoordinatorContract.identifierKey,
+      CoordinatorContract.packageValue,
+    );
     const dkg: TDKG = {
       state,
       vset,
@@ -535,10 +533,10 @@ export class CoordinatorContract implements Contract {
       cfgHash,
       attempts,
       timeout,
+      count,
+      pubkeyPackages: packagesDict,
     };
-    if (packageCell) {
-      dkg.pubkeyPackage = writeCellsToBuffer(packageCell);
-    }
+
     return dkg;
   }
 
@@ -568,9 +566,12 @@ export class CoordinatorContract implements Contract {
 
   async getPubkeyPackage(
     provider: ContractProvider,
+    opts: {
+      identifier: Buffer;
+    },
   ): Promise<Buffer | undefined> {
-    const dkg = await this.getPrevDKG(provider);
-    return dkg?.pubkeyPackage;
+    const dkg = await this.getDKG(provider);
+    return dkg?.pubkeyPackages.get(opts.identifier);
   }
 
   async getVset(
@@ -618,22 +619,6 @@ export class CoordinatorContract implements Contract {
     return r2PkgsArr;
   }
 
-  async getR1Completed(provider: ContractProvider) {
-    const dkg = await this.getDKG(provider);
-    if (!dkg) throw "dkg is undefined";
-    return (
-      dkg.state >= DkgState.PART1_FINISHED || dkg.state === DkgState.FINISHED
-    );
-  }
-
-  async getR2Completed(provider: ContractProvider): Promise<boolean> {
-    const dkg = await this.getDKG(provider);
-    if (!dkg) throw "dkg is undefined";
-    return (
-      dkg.state >= DkgState.PART2_FINISHED || dkg.state === DkgState.FINISHED
-    );
-  }
-
   private async buildExternalMessage(signBody: Cell): Promise<Cell> {
     const signature = this.signer
       ? await this.signer!.signCell(signBody)
@@ -672,16 +657,6 @@ export class CoordinatorContract implements Contract {
     return dict;
   }
 
-  async getCommitsMap(
-    provider: ContractProvider,
-    args: {
-      pegoutTxId: number;
-    },
-  ): Promise<Map<string, Buffer>> {
-    const dict = await this.getCommitments(provider, args);
-    return dict ? await this.dictToMap(dict) : new Map<string, Buffer>();
-  }
-
   async getSigningShares(
     provider: ContractProvider,
     args: {
@@ -696,26 +671,6 @@ export class CoordinatorContract implements Contract {
       ?.beginParse()
       .loadDictDirect(Dictionary.Keys.Buffer(32), Dictionary.Values.Cell());
     return dict;
-  }
-
-  async getSigningSharesMap(
-    provider: ContractProvider,
-    args: {
-      pegoutTxId: number;
-    },
-  ): Promise<Map<string, Map<string, Buffer>>> {
-    const dict = await this.getSigningShares(provider, args);
-    const map = dict ? await this.dictToMap(dict) : new Map<string, Cell>();
-    const res = new Map<string, Map<string, Buffer>>();
-    for (const [key, shares] of map) {
-      const sharesMap = await this.dictToMap(
-        shares
-          .beginParse()
-          .loadDictDirect(Dictionary.Keys.Buffer(8), PegoutTxContract.RefValue),
-      );
-      res.set(key, sharesMap);
-    }
-    return res;
   }
 
   async getUnsignedPegouts(
