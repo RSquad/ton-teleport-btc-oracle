@@ -71,6 +71,7 @@ export type TValidator = {
 };
 
 export type TPegoutRecord = {
+  internalKey: Buffer;
   pegoutAddress: Address;
   commitments: Dictionary<Buffer, Buffer>;
   signingShares: Dictionary<Buffer, Cell>;
@@ -132,17 +133,25 @@ export type TR2Package = {
   packages: Dictionary<Buffer, Dictionary<Buffer, Buffer>>;
 };
 
+export type TR3Package = {
+  mask: bigint;
+  count: number;
+  pubkeyData?: {
+    pubkeyPackage: Buffer;
+    internalKey: Buffer;
+  };
+};
+
 export type TDKG = {
   state: DkgState;
   vset: Dictionary<number, Buffer>;
   maxSigners: number;
   r1Packages: TR1Package;
   r2Packages: TR2Package;
+  r3Package: TR3Package;
   cfgHash: Buffer;
   attempts: number;
   timeout: number;
-  pubkeyPackages: Dictionary<Buffer, Buffer>;
-  count: number;
 };
 
 export type TCoordinatorConfig = {

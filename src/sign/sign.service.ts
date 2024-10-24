@@ -282,7 +282,7 @@ export class SignService {
     const { signatures: pegoutSignatures } =
       await pegoutTxContract.getTxParts();
     const prevDkg = await this.tcCoordinator.getPrevDKG();
-    const pubkeyPackage = prevDkg?.pubkeyPackages.get(identifier);
+    const pubkeyPackage = prevDkg?.r3Package.pubkeyData?.pubkeyPackage;
     const isSignatureExists = !!pegoutSignatures.length;
     if (isSignatureExists) {
       this.logger.log("Completed. Signature already exists.");
