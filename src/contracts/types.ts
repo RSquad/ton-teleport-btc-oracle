@@ -141,7 +141,8 @@ export type TDKG = {
   cfgHash: Buffer;
   attempts: number;
   timeout: number;
-  pubkeyPackage?: Buffer;
+  pubkeyPackages: Dictionary<Buffer, Buffer>;
+  count: number;
 };
 
 export type TCoordinatorConfig = {
