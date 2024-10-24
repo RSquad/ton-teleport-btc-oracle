@@ -71,6 +71,7 @@ export type TValidator = {
 };
 
 export type TPegoutRecord = {
+  internalKey: Buffer;
   pegoutAddress: Address;
   commitments: Dictionary<Buffer, Buffer>;
   signingShares: Dictionary<Buffer, Cell>;
@@ -141,8 +142,10 @@ export type TDKG = {
   cfgHash: Buffer;
   attempts: number;
   timeout: number;
-  pubkeyPackages: Dictionary<Buffer, Buffer>;
-  count: number;
+  validatorsCount: number;
+  validatorsMask: bigint;
+  pubkeyPackage?: Buffer;
+  internalKey?: Buffer;
 };
 
 export type TCoordinatorConfig = {

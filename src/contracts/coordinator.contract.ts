@@ -36,6 +36,22 @@ function storeDKGToCell(dkg?: TDKG) {
     return undefined;
   }
 
+  let pubkeyPackageRef = beginCell()
+    .storeUint(dkg.validatorsCount, 16)
+    .storeUint(dkg.validatorsMask, 256);
+
+  if (dkg.pubkeyPackage && dkg.internalKey) {
+    pubkeyPackageRef = pubkeyPackageRef
+      .storeMaybeRef(splitBufferToCells(dkg.pubkeyPackage))
+      .storeBuffer(dkg.internalKey);
+  } else if (dkg.pubkeyPackage || dkg.internalKey) {
+    throw Error(
+      "pubkeyPackage and internalKey should be defined or not at the same time",
+    );
+  } else {
+    pubkeyPackageRef = pubkeyPackageRef.storeUint(0, 1);
+  }
+
   return beginCell()
     .storeUint(dkg.state, 2)
     .storeDict(dkg.vset)
@@ -49,8 +65,7 @@ function storeDKGToCell(dkg?: TDKG) {
     .storeBuffer(dkg.cfgHash, 32)
     .storeUint(dkg.attempts, 8)
     .storeUint(dkg.timeout, 32)
-    .storeUint(dkg.count, 16)
-    .storeDict(dkg.pubkeyPackages)
+    .storeRef(pubkeyPackageRef.endCell())
     .endCell();
 }
 
@@ -134,6 +149,7 @@ export class CoordinatorContract implements Contract {
           .storeUint(src.signingShares.keys().length, 16)
           .storeDict(src.signingShares)
           .storeAddress(src.pegoutAddress)
+          .storeRef(beginCell().storeBuffer(src.internalKey, 32).endCell())
           .endCell(),
       );
     },
@@ -153,7 +169,9 @@ export class CoordinatorContract implements Contract {
       );
 
       const pegoutAddress = slice.loadAddress();
+      const internalKey = slice.loadRef().beginParse().loadBuffer(32);
       return {
+        internalKey,
         pegoutAddress,
         commitments: commitmentsDict,
         signingShares: signingSharesDict,
@@ -512,11 +530,10 @@ export class CoordinatorContract implements Contract {
     const cfgHash = dkgSlice.loadBuffer(32);
     const attempts = dkgSlice.loadUint(8);
     const timeout = dkgSlice.loadUint(32);
-    const count = dkgSlice.loadUint(16);
-    const packagesDict = dkgSlice.loadDict(
-      CoordinatorContract.identifierKey,
-      CoordinatorContract.packageValue,
-    );
+    const packagesSlice = dkgSlice.loadRef().beginParse();
+    const validatorsCount = packagesSlice.loadUint(16);
+    const validatorsMask = packagesSlice.loadUintBig(256);
+
     const dkg: TDKG = {
       state,
       vset,
@@ -532,9 +549,15 @@ export class CoordinatorContract implements Contract {
       cfgHash,
       attempts,
       timeout,
-      count,
-      pubkeyPackages: packagesDict,
+      validatorsCount,
+      validatorsMask,
     };
+
+    const pubkeyPackage = packagesSlice.loadMaybeRef();
+    if (pubkeyPackage) {
+      dkg.pubkeyPackage = writeCellsToBuffer(pubkeyPackage);
+      dkg.internalKey = packagesSlice.loadBuffer(32);
+    }
 
     return dkg;
   }
