@@ -14,7 +14,7 @@ export class ValidatorSigner implements ISigner {
       cell.hash().toString("hex"),
     );
 
-    return Buffer.from(result!);
+    return Buffer.from(result!, "base64");
   }
 
   set publicKey(pubkey: Buffer) {
