@@ -37,17 +37,13 @@ function storeDKGToCell(dkg?: TDKG) {
   }
 
   let pubkeyPackageRef = beginCell()
-    .storeUint(dkg.validatorsCount, 16)
-    .storeUint(dkg.validatorsMask, 256);
+    .storeUint(dkg.r3Package.count, 16)
+    .storeUint(dkg.r3Package.mask, 256);
 
-  if (dkg.pubkeyPackage && dkg.internalKey) {
+  if (dkg.r3Package.pubkeyData) {
     pubkeyPackageRef = pubkeyPackageRef
-      .storeMaybeRef(splitBufferToCells(dkg.pubkeyPackage))
-      .storeBuffer(dkg.internalKey);
-  } else if (dkg.pubkeyPackage || dkg.internalKey) {
-    throw Error(
-      "pubkeyPackage and internalKey should be defined or not at the same time",
-    );
+      .storeMaybeRef(splitBufferToCells(dkg.r3Package.pubkeyData.pubkeyPackage))
+      .storeBuffer(dkg.r3Package.pubkeyData.internalKey);
   } else {
     pubkeyPackageRef = pubkeyPackageRef.storeUint(0, 1);
   }
@@ -546,17 +542,21 @@ export class CoordinatorContract implements Contract {
         ...r2PackageParams,
         packages: r2PackageDict,
       },
+      r3Package: {
+        count: validatorsCount,
+        mask: validatorsMask,
+      },
       cfgHash,
       attempts,
       timeout,
-      validatorsCount,
-      validatorsMask,
     };
 
     const pubkeyPackage = packagesSlice.loadMaybeRef();
     if (pubkeyPackage) {
-      dkg.pubkeyPackage = writeCellsToBuffer(pubkeyPackage);
-      dkg.internalKey = packagesSlice.loadBuffer(32);
+      dkg.r3Package.pubkeyData = {
+        pubkeyPackage: writeCellsToBuffer(pubkeyPackage),
+        internalKey: packagesSlice.loadBuffer(32),
+      };
     }
 
     return dkg;

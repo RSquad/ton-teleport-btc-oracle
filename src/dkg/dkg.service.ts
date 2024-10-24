@@ -145,7 +145,7 @@ export class DkgService {
       return;
     }
 
-    const onchainPubkeyPackage = dkg.pubkeyPackage;
+    const onchainPubkeyPackage = dkg.r3Package.pubkeyData?.pubkeyPackage;
     let pubkeyPkg = onchainPubkeyPackage;
     if (!(pubkeyPkg && this.loadSecretPackage(pubkeyPkg))) {
       // to generate secret package, r2 secret must be present.
