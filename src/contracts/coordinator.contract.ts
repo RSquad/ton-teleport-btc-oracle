@@ -87,8 +87,7 @@ export const ValidatorDescrValue: DictionaryValue<Buffer> = {
     builder
       .storeUint(0x53, 8)
       .storeUint(ED25519_PUBKEY_TAG, 32)
-      .storeBuffer(src, 32)
-      .endCell();
+      .storeBuffer(src, 32);
   },
   parse: (src: Slice): Buffer => {
     const slice = src;
@@ -562,16 +561,6 @@ export class CoordinatorContract implements Contract {
   ): Promise<Dictionary<Buffer, Dictionary<Buffer, Buffer>> | undefined> {
     const dkg = await this.getDKG(provider);
     return dkg?.r2Packages.packages;
-  }
-
-  async getPubkeyPackage(
-    provider: ContractProvider,
-    opts: {
-      identifier: Buffer;
-    },
-  ): Promise<Buffer | undefined> {
-    const dkg = await this.getDKG(provider);
-    return dkg?.pubkeyPackages.get(opts.identifier);
   }
 
   async getVset(
