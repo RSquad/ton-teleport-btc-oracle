@@ -98,7 +98,7 @@ export class SignService {
         (await this.doSign(valKey, pegoutTxId, pegoutTx, minSigners)) &&
         (await this.doAggregate(valKey, pegoutTxId, pegoutTx));
     } catch (error: any) {
-      this.logger.log(error?.response?.data || error, error?.stack);
+      console.log(error?.response?.data || error, error?.stack);
     }
   }
 

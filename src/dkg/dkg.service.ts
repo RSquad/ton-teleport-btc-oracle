@@ -145,6 +145,7 @@ export class DkgService {
       return;
     }
 
+    const isPackageSent = dkg.r3Package.mask & (1n << BigInt(validatorIdx));
     const onchainPubkeyPackage = dkg.r3Package.pubkeyData?.pubkeyPackage;
     let pubkeyPkg = onchainPubkeyPackage;
     if (!(pubkeyPkg && this.loadSecretPackage(pubkeyPkg))) {
@@ -154,15 +155,14 @@ export class DkgService {
       }
       const r1Pkgs = this.tcCoordinator.r1Pkgs(dkg, identifier);
       const r2Pkgs = this.tcCoordinator.r2Pkgs(dkg, identifier);
-      this.logger.log(`Part3 started`);
+      this.logger.log(`Call Part3`);
       const dkgR3Res = frost.dkgPart3(this.r2Secret, r1Pkgs, r2Pkgs);
       this.storeSecretPackage(dkgR3Res.publicKeyPackage, dkgR3Res.keyPackage);
-      pubkeyPkg = dkgR3Res.publicKeyPackage;
       this.logger.log(`Secret package saved.`);
-      this.logger.log(`Part3 completed.`);
+      pubkeyPkg = dkgR3Res.publicKeyPackage;
     }
 
-    if (!onchainPubkeyPackage && pubkeyPkg) {
+    if (pubkeyPkg && !isPackageSent) {
       const { verifyingKey }: { verifyingKey: Buffer } =
         await frost.fromPublicKeyPackage(pubkeyPkg);
       const internalKeyXY = verifyingKey;
@@ -172,6 +172,7 @@ export class DkgService {
         pubkeyPackage: pubkeyPkg,
         internalKeyXY,
       });
+      this.logger.log(`R3 package sent.`);
     }
 
     if (
@@ -180,6 +181,7 @@ export class DkgService {
       this.loadSecretPackage(pubkeyPkg)
     ) {
       this.dkgRound = DkgRound.COMPLETED;
+      this.logger.log(`R3 completed.`);
     }
   }
 
@@ -255,7 +257,7 @@ export class DkgService {
     const r1Pkgs = dkg.r1Packages.packages;
 
     if (!!this.tcCoordinator.parseRound1Packages(r1Pkgs).get(identifier)) {
-      this.logger.log(`R1 package sent. DKG R1 initiated.`);
+      this.logger.log(`R1 package already sent.`);
       this.dkgRound = DkgRound.R1_COMPLETED;
       return;
     }
@@ -278,6 +280,7 @@ export class DkgService {
   }
 
   private reset() {
+    this.logger.log("Reset local state.");
     this.dkgRound = DkgRound.NOT_STARTED;
     this.dkgR1Res = undefined;
     this.dkgR2Res = undefined;
