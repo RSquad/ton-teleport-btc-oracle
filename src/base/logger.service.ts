@@ -61,7 +61,11 @@ export class Logger {
       params = optionalParams.slice(0, -1);
     }
 
-    if (typeof message === "object") {
+
+    if (message?.response?.data?.error) {
+      objArg["error"] = message?.response?.data?.code;
+      this.logger[level](objArg, message?.response?.data?.error, ...params);
+    } else if (typeof message === "object") {
       if (message instanceof Error) {
         objArg["err"] = message;
       } else {
