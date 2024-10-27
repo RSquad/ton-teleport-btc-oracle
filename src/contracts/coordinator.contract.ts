@@ -60,7 +60,7 @@ function storeDKGToCell(dkg?: TDKG) {
     .storeDict(dkg.r2Packages.packages)
     .storeBuffer(dkg.cfgHash, 32)
     .storeUint(dkg.attempts, 8)
-    .storeUint(dkg.timeout, 32)
+    .storeUint(dkg.until, 32)
     .storeRef(pubkeyPackageRef.endCell())
     .endCell();
 }
@@ -116,6 +116,7 @@ export const ValidatorDescrValue: DictionaryValue<Buffer> = {
 
 export class CoordinatorContract implements Contract {
   private signer?: ISigner | undefined;
+  static dkgTimeout = 600;
   constructor(
     readonly address: Address,
     signer?: ISigner,
@@ -525,7 +526,7 @@ export class CoordinatorContract implements Contract {
     );
     const cfgHash = dkgSlice.loadBuffer(32);
     const attempts = dkgSlice.loadUint(8);
-    const timeout = dkgSlice.loadUint(32);
+    const until = dkgSlice.loadUint(32);
     const packagesSlice = dkgSlice.loadRef().beginParse();
     const validatorsCount = packagesSlice.loadUint(16);
     const validatorsMask = packagesSlice.loadUintBig(256);
@@ -548,7 +549,7 @@ export class CoordinatorContract implements Contract {
       },
       cfgHash,
       attempts,
-      timeout,
+      until,
     };
 
     const pubkeyPackage = packagesSlice.loadMaybeRef();
@@ -584,29 +585,6 @@ export class CoordinatorContract implements Contract {
   ): Promise<Dictionary<Buffer, Dictionary<Buffer, Buffer>> | undefined> {
     const dkg = await this.getDKG(provider);
     return dkg?.r2Packages.packages;
-  }
-
-  async getVset(
-    provider: ContractProvider,
-  ): Promise<
-    { vsetMain: number; dict: Dictionary<number, Buffer> } | undefined
-  > {
-    const dkg = await this.getDKG(provider);
-    if (!dkg) return undefined;
-    return { vsetMain: dkg!.maxSigners, dict: dkg!.vset };
-  }
-
-  async getValidatorIdx(
-    provider: ContractProvider,
-    { pubkey }: { pubkey: string },
-  ): Promise<number | undefined> {
-    const dkg = await this.getDKG(provider);
-    return dkg?.vset.keys().find((idx) => {
-      const validatorKey = dkg.vset.get(idx);
-      if (validatorKey && validatorKey.toString("hex") === pubkey) {
-        return true;
-      } else false;
-    });
   }
 
   r1Pkgs(dkg: TDKG, identifier: string): TReceivedPkg[] {
