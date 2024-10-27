@@ -151,7 +151,7 @@ export type TDKG = {
   r3Package: TR3Package;
   cfgHash: Buffer;
   attempts: number;
-  timeout: number;
+  until: number;
 };
 
 export type TCoordinatorConfig = {
