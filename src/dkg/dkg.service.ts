@@ -61,6 +61,12 @@ export class DkgService {
 
   async init() {}
 
+  private reset() {
+    this.part1Result = undefined;
+    this.part2Result = undefined;
+    this.part3Result = undefined;
+  }
+
   async executeDkg() {
     if (this.inProgress) {
       this.logger.log("DKG is in progress.");
@@ -71,6 +77,7 @@ export class DkgService {
 
     try {
       await this.tonService.tcCoordinator.sendStartDKG();
+      this.reset();
     } catch (e) {
       this.logger.debug(e);
     }
