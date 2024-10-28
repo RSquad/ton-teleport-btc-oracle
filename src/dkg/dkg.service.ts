@@ -34,6 +34,7 @@ export class DkgService {
   private part1Result?: TDKGRound1Result;
   private part2Result?: TDKGRound2Result;
   private part3Result?: TDKGRound3Result;
+  private dkgUntil: number = 0;
   private configService: ConfigService;
   private tonService: TonService;
   private keyStore: KeystoreService;
@@ -61,10 +62,11 @@ export class DkgService {
 
   async init() {}
 
-  private reset() {
+  private reset(until: number) {
     this.part1Result = undefined;
     this.part2Result = undefined;
     this.part3Result = undefined;
+    this.dkgUntil = until;
   }
 
   async executeDkg() {
@@ -77,7 +79,6 @@ export class DkgService {
 
     try {
       await this.tonService.tcCoordinator.sendStartDKG();
-      this.reset();
     } catch (e) {
       this.logger.debug(e);
     }
@@ -92,6 +93,11 @@ export class DkgService {
       if (dkg!.state === DkgState.FINISHED) {
         this.logger.log("DKG finished. No need to execute.");
         return;
+      }
+
+      if (dkg!.until != this.dkgUntil) {
+        this.reset(dkg!.until);
+        this.logger.log(`New DKG started. Until ${dkg!.until}.`);
       }
 
       await this.execute(dkg);
@@ -173,6 +179,7 @@ export class DkgService {
       this.logger.log(`Secret package saved.`);
     } else {
       if (!this.part3Result) {
+        this.logger.log(`Restore R3 package.`);
         this.part3Result = {
           publicKeyPackage: onchainPubkeyPackage,
           keyPackage: this.loadSecretPackage(onchainPubkeyPackage)!,
@@ -234,9 +241,8 @@ export class DkgService {
       throw new Error("R1 secret not found.");
     }
 
-    this.logger.log(`Received R1 packages. Preparing for R2.`);
-
     if (!this.part2Result) {
+      this.logger.log(`Call part2.`);
       const r1Pkgs = await this.tcCoordinator.r1Pkgs(dkg, identifier);
       this.part2Result = frost.dkgPart2(
         this.part1Result!.secretPackagePtr,
@@ -271,7 +277,7 @@ export class DkgService {
     const isR1Completed =
       dkg.state >= DkgState.PART1_FINISHED || dkg.state === DkgState.FINISHED;
     if (isR1Completed) {
-      this.logger.log("R1 already completed.");
+      this.logger.log("R1 completed.");
       return true;
     }
 
@@ -281,9 +287,8 @@ export class DkgService {
       return false;
     }
 
-    this.logger.log("Starting DKG process with R1.");
-
     if (!this.part1Result) {
+      this.logger.log("Call part1");
       const minSigners = Math.max(2, Math.floor((dkg.maxSigners * 2) / 3));
       this.part1Result = frost.dkgPart1(identifier, dkg.maxSigners, minSigners);
     }
