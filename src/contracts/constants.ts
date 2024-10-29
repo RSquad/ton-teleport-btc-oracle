@@ -25,6 +25,7 @@ export const OpCodes = {
   CREDENTIALS_ADD: 0xce2eda5e,
   COORDINATOR_INITIALIZE: 0x550da31d,
   DKG_START: 0xe16b89c0,
+  COMMON_UPGRADE: 0x4a34e1e7,
 };
 
 export const Logs = {
