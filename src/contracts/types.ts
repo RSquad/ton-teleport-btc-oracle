@@ -159,6 +159,7 @@ export type TCoordinatorConfig = {
   standaloneMode: boolean;
   dkg?: TDKG;
   prevDKG?: TDKG;
-  pegouts?: Dictionary<Buffer, TPegoutRecord>;
+  pegouts?: Dictionary<number, TPegoutRecord>;
   pegoutTxCode: Cell;
+  configuratorAddr: Address;
 };
