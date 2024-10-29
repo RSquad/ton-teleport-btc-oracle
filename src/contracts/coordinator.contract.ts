@@ -70,6 +70,7 @@ function coordinatorConfigToCell(config: TCoordinatorConfig): Cell {
     .storeUint(0, 1) // initialized?
     .storeBit(config.standaloneMode)
     .storeUint(config.id, 32)
+    .storeAddress(config.configuratorAddr)
     .storeMaybeRef(storeDKGToCell(config.dkg))
     .storeMaybeRef(storeDKGToCell(config.prevDKG))
     .storeDict(config.pegouts || Dictionary.empty())
@@ -244,6 +245,31 @@ export class CoordinatorContract implements Contract {
       .endCell();
     const msgCell = await this.buildExternalMessage(signBody);
     await provider.external(msgCell);
+  }
+
+  async sendUpgrade(
+    provider: ContractProvider,
+    via: Sender,
+    value: bigint,
+    opts: {
+      code: Cell;
+      afterUpgrade?: {
+        data?: Cell;
+      };
+    },
+  ) {
+    const body = beginCell()
+      .storeUint(OpCodes.COMMON_UPGRADE, 32)
+      .storeUint(0, 64)
+      .storeRef(opts.code);
+    if (opts.afterUpgrade) {
+      body.storeMaybeRef(opts.afterUpgrade!.data);
+    }
+    await provider.internal(via, {
+      value,
+      sendMode: SendMode.PAY_GAS_SEPARATELY,
+      body: body.endCell(),
+    });
   }
 
   async sendRound1(
