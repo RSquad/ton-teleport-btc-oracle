@@ -115,11 +115,6 @@ export class SignService {
 
     const isCommitSent = !!pegoutRecord.commitments.get(identifier);
 
-    const pegoutTxContract = this.tonService.tonClient.open(
-      PegoutTxContract.createFromAddress(pegoutRecord.pegoutAddress),
-    );
-    const { internalKey } = await pegoutTxContract.getTxParts();
-
     if (!isCommitSent) {
       let nonce = this.keyStore.loadTemp(`nonce_${pegoutAddressStr}`);
 
@@ -129,7 +124,7 @@ export class SignService {
 
       if (!nonce || !commitments) {
         if (!nonce && !commitments) {
-          const commitResult = await this.dkgService.commit(internalKey);
+          const commitResult = await this.dkgService.commit(pegoutRecord.internalKey);
           nonce = commitResult.nonce;
           commitments = commitResult.commitments;
           this.keyStore.storeTemp(
@@ -205,7 +200,7 @@ export class SignService {
       return false;
     }
 
-    const { inputs, internalKey } = await pegoutTxContract.getTxParts();
+    const { inputs } = await pegoutTxContract.getTxParts();
     const inputTxids = inputs.keys().sort((a, b) => (a - b >= 0 ? 1 : -1));
 
     let signPkgs = this.keyStore.loadTempArray(`pkgs_${pegoutAddressStr}`);
@@ -237,7 +232,7 @@ export class SignService {
         signShares = [];
         for (let i = 0; i < signHashes.length; i++) {
           const signShare = await this.dkgService.sign(
-            internalKey,
+            pegoutRecord.internalKey,
             signPkgs[i],
             nonce,
           );
@@ -278,16 +273,14 @@ export class SignService {
     const pegoutTxContract = this.tonService.tonClient.open(
       PegoutTxContract.createFromAddress(pegoutRecord.pegoutAddress),
     );
-
-    const { signatures: pegoutSignatures } =
-      await pegoutTxContract.getTxParts();
-    const prevDkg = await this.tcCoordinator.getPrevDKG();
-    const pubkeyPackage = prevDkg?.r3Package.pubkeyData?.pubkeyPackage;
+    const { signatures: pegoutSignatures } = await pegoutTxContract.getTxParts();
     const isSignatureExists = !!pegoutSignatures.length;
     if (isSignatureExists) {
       this.logger.log("Completed. Signature already exists.");
       return true;
     }
+    const prevDkg = await this.tcCoordinator.getPrevDKG();
+    const pubkeyPackage = prevDkg?.r3Package.pubkeyData?.pubkeyPackage;
 
     const sharesArr: {
       identifier: string;
