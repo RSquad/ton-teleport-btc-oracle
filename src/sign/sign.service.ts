@@ -270,17 +270,17 @@ export class SignService {
     );
     const identifier = validatorKey.validatorKey;
 
-    //const pegoutTxContract = this.tonService.tonClient.open(
-    //  PegoutTxContract.createFromAddress(pegoutRecord.pegoutAddress),
-    //);
-    //const { signatures: pegoutSignatures } = await pegoutTxContract.getTxParts();
-    const prevDkg = await this.tcCoordinator.getPrevDKG();
-    const pubkeyPackage = prevDkg?.r3Package.pubkeyData?.pubkeyPackage;
-    /*const isSignatureExists = !!pegoutSignatures.length;
+    const pegoutTxContract = this.tonService.tonClient.open(
+      PegoutTxContract.createFromAddress(pegoutRecord.pegoutAddress),
+    );
+    const { signatures: pegoutSignatures } = await pegoutTxContract.getTxParts();
+    const isSignatureExists = !!pegoutSignatures.length;
     if (isSignatureExists) {
       this.logger.log("Completed. Signature already exists.");
       return true;
-    }*/
+    }
+    const prevDkg = await this.tcCoordinator.getPrevDKG();
+    const pubkeyPackage = prevDkg?.r3Package.pubkeyData?.pubkeyPackage;
 
     const sharesArr: {
       identifier: string;
