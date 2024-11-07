@@ -269,7 +269,7 @@ export class SignService {
       `Aggregate sign shares for pegout ${pegoutId.toString(16)}`,
     );
     const identifier = validatorKey.validatorKey;
-    /*
+
     const pegoutTxContract = this.tonService.tonClient.open(
       PegoutTxContract.createFromAddress(pegoutRecord.pegoutAddress),
     );
@@ -279,7 +279,6 @@ export class SignService {
       this.logger.log("Completed. Signature already exists.");
       return true;
     }
-    */
     const prevDkg = await this.tcCoordinator.getPrevDKG();
     const pubkeyPackage = prevDkg?.r3Package.pubkeyData?.pubkeyPackage;
 
