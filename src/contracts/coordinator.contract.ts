@@ -17,7 +17,7 @@ import {
 } from "@ton/core";
 import { type ISigner } from "../signers";
 import { splitBufferToCells, writeCellsToBuffer } from "./common";
-import { OpCodes } from "./constants";
+import { OpCodes, SIGNATURE_LENGTH } from "./constants";
 import { PegoutTxContract } from "./pegouttx.contract";
 import {
   DkgState,
@@ -453,7 +453,7 @@ export class CoordinatorContract implements Contract {
   ) {
     const signaturesDict = Dictionary.empty(
       Dictionary.Keys.Uint(16),
-      Dictionary.Values.Buffer(65),
+      Dictionary.Values.Buffer(SIGNATURE_LENGTH),
     );
 
     for (let i = 0; i < opts.signatures.length; i++) {
@@ -461,8 +461,8 @@ export class CoordinatorContract implements Contract {
       if (opts.identifier.length != 32) {
         throw "identifier must be 32 bytes length";
       }
-      if (signature.length != 65) {
-        throw "signature must be 65 bytes length";
+      if (signature.length != SIGNATURE_LENGTH) {
+        throw `signature must be ${SIGNATURE_LENGTH} bytes length`;
       }
       signaturesDict.set(i, signature);
     }
