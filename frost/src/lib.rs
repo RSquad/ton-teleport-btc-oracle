@@ -6,7 +6,6 @@ use frost_secp256k1_tr as frost;
 use key::XYEncodedPublicKey;
 use std::collections::BTreeMap;
 
-use crate::frost::SigningTarget;
 use ::bitcoin::key::{PublicKey, XOnlyPublicKey};
 use frost::keys::dkg::{
     round1::Package as PackageRound1, round1::SecretPackage as SecretPackageRound1,
@@ -14,15 +13,12 @@ use frost::keys::dkg::{
 };
 use frost::keys::{KeyPackage, PublicKeyPackage};
 use frost::round1::{SigningCommitments, SigningNonces};
-use frost::{Identifier, Signature, SigningPackage, SigningParameters};
+use frost::{Identifier, Signature, SigningPackage};
 use frost_core::round2::SignatureShare;
 use neon::prelude::*;
 use neon::types::buffer::TypedArray;
 use rand::thread_rng;
-use std::{
-    convert::{From, TryFrom, TryInto},
-    path::Path,
-};
+use std::convert::{From, TryFrom, TryInto};
 
 fn cast<T: Sized>(ptr_str: String) -> Result<Box<T>, String> {
     unsafe {
@@ -33,27 +29,16 @@ fn cast<T: Sized>(ptr_str: String) -> Result<Box<T>, String> {
     }
 }
 
-fn signing_target(
-    cx: &FunctionContext,
-    message: Handle<JsBuffer>,
-    tap_merkle_root: Option<Handle<JsBuffer>>,
-) -> SigningTarget {
-    SigningTarget::new(
-        message.as_slice(cx),
-        SigningParameters {
-            tapscript_merkle_root: tap_merkle_root
-                .map(|v| v.as_slice(cx).to_vec())
-                .or(Some(vec![])),
-        },
-    )
-}
-
-fn extract_verifying_key(cx: &mut FunctionContext, pubkey_buffer: Handle<JsBuffer>) -> [u8; 32] {
+fn extract_verifying_key(
+    cx: &mut FunctionContext,
+    pubkey_buffer: Handle<JsBuffer>,
+) -> Result<[u8; 32], frost::Error> {
     let pubkey_package = PublicKeyPackage::deserialize(pubkey_buffer.as_slice(cx)).unwrap();
     let verifying_key_b = pubkey_package.verifying_key();
-    let pubk = PublicKey::from_slice(&verifying_key_b.serialize()[..]).unwrap();
+    let key_vec = verifying_key_b.serialize()?;
+    let pubk = PublicKey::from_slice(&key_vec[..]).unwrap();
     let xpubk = XOnlyPublicKey::from(pubk.inner);
-    xpubk.serialize()
+    Ok(xpubk.serialize())
 }
 
 fn derive_identifier(mut cx: FunctionContext) -> JsResult<JsString> {
@@ -212,9 +197,6 @@ fn commit(mut cx: FunctionContext) -> JsResult<JsObject> {
 fn create_signing_package(mut cx: FunctionContext) -> JsResult<JsBuffer> {
     let commitments_array = cx.argument::<JsArray>(0)?;
     let message = cx.argument::<JsBuffer>(1)?;
-    let tap_merkle_root = cx
-        .argument_opt(2)
-        .and_then(|arg| arg.downcast::<JsBuffer, _>(&mut cx).ok());
     let mut commitments_map = BTreeMap::new();
     for i in 0..commitments_array.len(&mut cx) {
         let obj: Handle<JsObject> = commitments_array.get(&mut cx, i)?;
@@ -229,10 +211,7 @@ fn create_signing_package(mut cx: FunctionContext) -> JsResult<JsBuffer> {
         commitments_map.insert(identifier, commitments);
     }
 
-    let signing_package = frost::SigningPackage::new(
-        commitments_map,
-        signing_target(&cx, message, tap_merkle_root),
-    );
+    let signing_package = SigningPackage::new(commitments_map, message.as_slice(&mut cx));
 
     let signing_package_buf =
         JsBuffer::external(&mut cx, js_throw_on_error!(cx, signing_package.serialize()));
@@ -243,6 +222,9 @@ fn sign(mut cx: FunctionContext) -> JsResult<JsBuffer> {
     let signing_package_buff: Handle<JsBuffer> = cx.argument::<JsBuffer>(0)?;
     let nonce_buf: Handle<JsBuffer> = cx.argument::<JsBuffer>(1)?;
     let key_package_buffer: Handle<JsBuffer> = cx.argument::<JsBuffer>(2)?;
+    let tap_merkle_root = cx
+        .argument_opt(3)
+        .and_then(|arg| arg.downcast::<JsBuffer, _>(&mut cx).ok());
 
     let nonces = js_throw_on_error!(cx, SigningNonces::deserialize(nonce_buf.as_slice(&mut cx)));
     let key_package = js_throw_on_error!(
@@ -255,7 +237,12 @@ fn sign(mut cx: FunctionContext) -> JsResult<JsBuffer> {
     );
     let signature_share = js_throw_on_error!(
         cx,
-        frost::round2::sign(&signing_package, &nonces, &key_package)
+        frost::round2::sign_with_tweak(
+            &signing_package,
+            &nonces,
+            &key_package,
+            tap_merkle_root.as_ref().map(|x| x.as_slice(&cx))
+        )
     );
     let signature_share_buff = JsBuffer::external(&mut cx, signature_share.serialize());
     Ok(signature_share_buff)
@@ -265,6 +252,9 @@ fn aggregate(mut cx: FunctionContext) -> JsResult<JsBuffer> {
     let signing_package_buf: Handle<JsBuffer> = cx.argument::<JsBuffer>(0)?;
     let signature_shares_array: Handle<JsArray> = cx.argument::<JsArray>(1)?;
     let pubkey_package_buf: Handle<JsBuffer> = cx.argument::<JsBuffer>(2)?;
+    let tap_merkle_root = cx
+        .argument_opt(3)
+        .and_then(|arg| arg.downcast::<JsBuffer, _>(&mut cx).ok());
 
     let signing_package = js_throw_on_error!(
         cx,
@@ -281,11 +271,8 @@ fn aggregate(mut cx: FunctionContext) -> JsResult<JsBuffer> {
         let mut id: [u8; 32] = [0; 32];
         js_throw_on_error!(cx, hex::decode_to_slice(identifier.value(&mut cx), &mut id));
         let identifier = js_throw_on_error!(cx, Identifier::deserialize(&id));
-
-        let signature_share_bytes: [u8; 32] =
-            js_throw_on_error!(cx, buffer.as_slice(&mut cx).try_into());
         let signature_share =
-            js_throw_on_error!(cx, SignatureShare::deserialize(signature_share_bytes));
+            js_throw_on_error!(cx, SignatureShare::deserialize(buffer.as_slice(&mut cx)));
         signature_shares_map.insert(identifier, signature_share);
     }
 
@@ -295,19 +282,21 @@ fn aggregate(mut cx: FunctionContext) -> JsResult<JsBuffer> {
     );
     let signature = js_throw_on_error!(
         cx,
-        frost::aggregate(&signing_package, &signature_shares_map, &pubkey)
+        frost::aggregate_with_tweak(
+            &signing_package,
+            &signature_shares_map,
+            &pubkey,
+            tap_merkle_root.as_ref().map(|x| x.as_slice(&cx))
+        )
     );
-    let signature_buffer = JsBuffer::external(&mut cx, signature.serialize());
-    Ok(signature_buffer)
+    let sig_vec = js_throw_on_error!(cx, signature.serialize());
+    Ok(JsBuffer::external(&mut cx, sig_vec))
 }
 
 fn verify(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let pubkey_package_buf: Handle<JsBuffer> = cx.argument::<JsBuffer>(0)?;
     let message_buf = cx.argument::<JsBuffer>(1)?;
     let signature_buf = cx.argument::<JsBuffer>(2)?;
-    let tap_merkle_root_buf = cx
-        .argument_opt(3)
-        .and_then(|arg| arg.downcast::<JsBuffer, _>(&mut cx).ok());
     let signature_as_slice = js_throw_on_error!(cx, signature_buf.as_slice(&cx).try_into());
     let signature = js_throw_on_error!(cx, Signature::deserialize(signature_as_slice));
     let pubkey_package = js_throw_on_error!(
@@ -316,10 +305,9 @@ fn verify(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     );
     js_throw_on_error!(
         cx,
-        pubkey_package.verifying_key().verify(
-            signing_target(&cx, message_buf, tap_merkle_root_buf),
-            &signature,
-        )
+        pubkey_package
+            .verifying_key()
+            .verify(message_buf.as_slice(&cx), &signature)
     );
 
     Ok(JsUndefined::new(&mut cx))
@@ -327,45 +315,8 @@ fn verify(mut cx: FunctionContext) -> JsResult<JsUndefined> {
 
 fn get_schnorr_pubkey(mut cx: FunctionContext) -> JsResult<JsBuffer> {
     let pubkey_package = cx.argument::<JsBuffer>(0)?;
-    let verifiying_key = extract_verifying_key(&mut cx, pubkey_package);
+    let verifiying_key = js_throw_on_error!(cx, extract_verifying_key(&mut cx, pubkey_package));
     Ok(JsBuffer::external(&mut cx, verifiying_key))
-}
-
-/// Allows to store secret key in persistent memory (file)
-/// arg0: string - relative path to directory where to store secret
-/// arg1: Buffer - public key package (from dkg::part3)
-/// arg2: Buffer - secret package (from dkg::part3)
-/// Return: Undefined
-fn store_secret_key(mut cx: FunctionContext) -> JsResult<JsUndefined> {
-    let path = cx.argument::<JsString>(0)?.value(&mut cx);
-    let pubkey_buf = cx.argument::<JsBuffer>(1)?;
-    let secret_buf = cx.argument::<JsBuffer>(2)?;
-    let secret = js_throw_on_error!(cx, KeyPackage::deserialize(secret_buf.as_slice(&mut cx)));
-    let verifiying_key = extract_verifying_key(&mut cx, pubkey_buf);
-    js_throw_on_error!(
-        cx,
-        std::fs::write(
-            Path::new(&path).join(hex::encode(verifiying_key) + ".secret"),
-            js_throw_on_error!(cx, secret.serialize()),
-        )
-    );
-    Ok(JsUndefined::new(&mut cx))
-}
-
-/// Allows to load secret key from persistent memory (file)
-/// arg0: string - relative path to directory where to find secret
-/// arg1: Buffer - public key package (from dkg::part3)
-/// Return: Buffer
-fn load_secret_key(mut cx: FunctionContext) -> JsResult<JsBuffer> {
-    let path = cx.argument::<JsString>(0)?.value(&mut cx);
-    let pubkey_buf = cx.argument::<JsBuffer>(1)?;
-    let verifiying_key = extract_verifying_key(&mut cx, pubkey_buf);
-    let secret = js_throw_on_error!(
-        cx,
-        std::fs::read(Path::new(&path).join(hex::encode(verifiying_key) + ".secret"))
-    );
-    let secret_buf = JsBuffer::external(&mut cx, secret);
-    Ok(secret_buf)
 }
 
 fn from_public_key_package(mut cx: FunctionContext) -> JsResult<JsObject> {
@@ -393,8 +344,6 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("aggregate", aggregate)?;
     cx.export_function("verify", verify)?;
     cx.export_function("getSchnorrPubkey", get_schnorr_pubkey)?;
-    cx.export_function("loadSecretKey", load_secret_key)?;
-    cx.export_function("storeSecretKey", store_secret_key)?;
     cx.export_function("fromPublicKeyPackage", from_public_key_package)?;
     Ok(())
 }

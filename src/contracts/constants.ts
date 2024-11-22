@@ -1,3 +1,5 @@
+export const SIGNATURE_LENGTH = 64;
+
 export const OpCodes = {
   BITCOIN_CLIENT_NEW_BLOCK: 0x5eefbc61,
   CONFIRMED_BLOCK_INITIALIZE: 0xac6681ed,
