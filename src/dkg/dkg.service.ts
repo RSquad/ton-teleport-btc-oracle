@@ -327,13 +327,11 @@ export class DkgService {
     publicKey: Buffer,
     signingPackage: Buffer,
     signingNonce: Buffer,
-    taprootMerkleRoot?: Buffer,
   ) {
     return await frost.sign(
       signingPackage,
       signingNonce,
       this.keyStore.load(publicKey.toString("hex")),
-      taprootMerkleRoot
     );
   }
 
