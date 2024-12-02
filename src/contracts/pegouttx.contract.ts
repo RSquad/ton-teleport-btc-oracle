@@ -13,7 +13,7 @@ import {
   type Sender,
 } from "@ton/core";
 import { bigIntToBuf, splitBufferToCells, writeCellsToBuffer } from "./common";
-import { OpCodes, SIGNATURE_LENGTH } from "./constants";
+import { OpCodes } from "./constants";
 import {
   type TTeleportOutput,
   type TTeleportUtxo,
@@ -139,7 +139,7 @@ export class PegoutTxContract implements Contract {
     const signatures =
       Dictionary.loadDirect(
         Dictionary.Keys.Uint(16),
-        Dictionary.Values.Buffer(SIGNATURE_LENGTH),
+        Dictionary.Values.Buffer(65),
         result.stack.readCellOpt(),
       )?.values() || [];
 

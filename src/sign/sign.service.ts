@@ -124,9 +124,7 @@ export class SignService {
 
       if (!nonce || !commitments) {
         if (!nonce && !commitments) {
-          const commitResult = await this.dkgService.commit(
-            pegoutRecord.internalKey,
-          );
+          const commitResult = await this.dkgService.commit(pegoutRecord.internalKey);
           nonce = commitResult.nonce;
           commitments = commitResult.commitments;
           this.keyStore.storeTemp(
@@ -202,6 +200,9 @@ export class SignService {
       return false;
     }
 
+    const { inputs } = await pegoutTxContract.getTxParts();
+    const inputTxids = inputs.keys().sort((a, b) => (a - b >= 0 ? 1 : -1));
+
     let signPkgs = this.keyStore.loadTempArray(`pkgs_${pegoutAddressStr}`);
     if (!signPkgs) {
       signPkgs = [];
@@ -209,6 +210,7 @@ export class SignService {
         const signPkg = await frost.createSigningPackage(
           commitsArr,
           signHashes[i],
+          inputs.get(inputTxids[i])!.taprootMerkleRoot,
         );
         signPkgs.push(signPkg);
       }
@@ -227,15 +229,12 @@ export class SignService {
         if (!nonce) {
           throw "Signing nonce is undefined.";
         }
-        const { inputs } = await pegoutTxContract.getTxParts();
-        const txidArray = inputs.keys().sort((a, b) => Number(a - b));
         signShares = [];
         for (let i = 0; i < signHashes.length; i++) {
           const signShare = await this.dkgService.sign(
             pegoutRecord.internalKey,
             signPkgs[i],
             nonce,
-            inputs.get(txidArray[i])?.taprootMerkleRoot,
           );
           signShares.push(signShare);
         }
@@ -274,8 +273,7 @@ export class SignService {
     const pegoutTxContract = this.tonService.tonClient.open(
       PegoutTxContract.createFromAddress(pegoutRecord.pegoutAddress),
     );
-    const { signatures: pegoutSignatures } =
-      await pegoutTxContract.getTxParts();
+    const { signatures: pegoutSignatures } = await pegoutTxContract.getTxParts();
     const isSignatureExists = !!pegoutSignatures.length;
     if (isSignatureExists) {
       this.logger.log("Completed. Signature already exists.");
@@ -312,14 +310,12 @@ export class SignService {
       this.logger.error("Signing packages array is empty");
       return false;
     }
-    const { inputs } = await pegoutTxContract.getTxParts();
-    const txidArray = inputs.keys().sort((a, b) => Number(a - b));
     for (let i = 0; i < signPkgs.length; i++) {
+      const signPkg = signPkgs[i];
       const signature = await frost.aggregate(
-        signPkgs[i],
+        signPkg,
         sharesArr.filter((share) => +("0x" + share.index) === i),
         pubkeyPackage,
-        inputs.get(txidArray[i])?.taprootMerkleRoot,
       );
       signatures.push(signature);
     }
