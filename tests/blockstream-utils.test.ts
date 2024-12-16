@@ -1,7 +1,7 @@
 import axios, { type AxiosResponse } from "axios";
 
 const blockstream = new axios.Axios({
-  baseURL: `https://blockstream.info/testnet/api`,
+  baseURL: `https://mempool.space/signet/api`,
 });
 
 export async function waitUntilUTXO(address: string) {
