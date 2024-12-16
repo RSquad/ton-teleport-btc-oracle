@@ -268,7 +268,7 @@ dependencies = [
 [[package]]
 name = "frost-core"
 version = "2.0.0"
-source = "git+https://github.com/conduition/frost?branch=add-secp256k1-tr#aa4b5fbd5f0e4fea5455570218b951bda5c908ce"
+source = "git+https://github.com/ZcashFoundation/frost?branch=main#061d1cb2036c8ce038392346d37588e0d696ec6f"
 dependencies = [
  "byteorder",
  "const-crc32-nostd",
@@ -290,7 +290,7 @@ dependencies = [
 [[package]]
 name = "frost-rerandomized"
 version = "2.0.0"
-source = "git+https://github.com/conduition/frost?branch=add-secp256k1-tr#aa4b5fbd5f0e4fea5455570218b951bda5c908ce"
+source = "git+https://github.com/ZcashFoundation/frost?branch=main#061d1cb2036c8ce038392346d37588e0d696ec6f"
 dependencies = [
  "derive-getters",
  "document-features",
@@ -301,15 +301,14 @@ dependencies = [
 
 [[package]]
 name = "frost-secp256k1-tr"
-version = "2.0.0-rc.0"
-source = "git+https://github.com/conduition/frost?branch=add-secp256k1-tr#aa4b5fbd5f0e4fea5455570218b951bda5c908ce"
+version = "2.0.0"
+source = "git+https://github.com/ZcashFoundation/frost?branch=main#061d1cb2036c8ce038392346d37588e0d696ec6f"
 dependencies = [
  "document-features",
  "frost-core",
  "frost-rerandomized",
  "k256",
  "rand_core",
- "serde",
  "sha2",
 ]
 
@@ -856,18 +855,18 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "1.0.69"
+version = "2.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52"
+checksum = "8fec2a1820ebd077e2b90c4df007bebf344cd394098a13c563957d0afc83ea47"
 dependencies = [
  "thiserror-impl",
 ]
 
 [[package]]
 name = "thiserror-impl"
-version = "1.0.69"
+version = "2.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
+checksum = "d65750cab40f4ff1929fb1ba509e9914eb756131cef4210da8d5d700d26f6312"
 dependencies = [
  "proc-macro2",
  "quote",

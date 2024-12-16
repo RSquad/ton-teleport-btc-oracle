@@ -83,7 +83,6 @@ export class FrostService {
 
   async createSigningPackage(
     message: Buffer,
-    tapMerkleRoot?: Buffer,
     identifiers?: Map<number, string>,
   ) {
     let signingCommitments = new Map<string, Buffer>();
@@ -103,19 +102,18 @@ export class FrostService {
     const result = frost.createSigningPackage(
       signingCommitmentsArray,
       message,
-      tapMerkleRoot,
     );
     this.signingPackage = result;
     return result;
   }
 
-  async signMessage(signingPackage: Buffer, identifiers?: Map<number, string>) {
+  async signMessage(signingPackage: Buffer, identifiers?: Map<number, string>, tapMerkleRoot?: Buffer) {
     const signingIdentifiers = identifiers ?? this.tmpIdentifiers;
     let count = 0;
     // @ts-ignore
     for (const identifier of signingIdentifiers) {
       if (count < this.minSigners) {
-        await this.doSignMessage(signingPackage, identifier[1]);
+        await this.doSignMessage(signingPackage, identifier[1], tapMerkleRoot);
         count++;
       } else {
         break;
@@ -230,16 +228,17 @@ export class FrostService {
     }
   }
 
-  private async doSignMessage(signingPackage: Buffer, identifier: string) {
+  private async doSignMessage(signingPackage: Buffer, identifier: string, tapMerkleRoot?: Buffer) {
     const result = frost.sign(
       signingPackage,
       this.signingNonces.get(identifier),
       this.keyPackages.get(identifier),
+      tapMerkleRoot,
     );
     this.signatureShares.set(identifier, result);
   }
 
-  async aggregate(identifiers?: Map<number, string>): Promise<Buffer> {
+  async aggregate(identifiers?: Map<number, string>, tapMerkleRoot?: Buffer): Promise<Buffer> {
     let signatureShares = new Map<string, Buffer>();
     if (identifiers) {
       identifiers.forEach((identifier) => {
@@ -254,6 +253,7 @@ export class FrostService {
       this.signingPackage,
       sigShares,
       this.publicKeyPackage,
+      tapMerkleRoot,
     );
 
     return result;

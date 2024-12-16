@@ -241,7 +241,7 @@ fn sign(mut cx: FunctionContext) -> JsResult<JsBuffer> {
             &signing_package,
             &nonces,
             &key_package,
-            tap_merkle_root.as_ref().map(|x| x.as_slice(&cx))
+            tap_merkle_root.as_ref().map(|x| x.as_slice(&cx)).or(Some(&[]))
         )
     );
     let signature_share_buff = JsBuffer::external(&mut cx, signature_share.serialize());
@@ -286,7 +286,7 @@ fn aggregate(mut cx: FunctionContext) -> JsResult<JsBuffer> {
             &signing_package,
             &signature_shares_map,
             &pubkey,
-            tap_merkle_root.as_ref().map(|x| x.as_slice(&cx))
+            tap_merkle_root.as_ref().map(|x| x.as_slice(&cx)).or(Some(&[]))
         )
     );
     let sig_vec = js_throw_on_error!(cx, signature.serialize());
