@@ -17,7 +17,7 @@ import {
 } from "@ton/core";
 import { type ISigner } from "../signers";
 import { splitBufferToCells, writeCellsToBuffer } from "./common";
-import { OpCodes } from "./constants";
+import { OpCodes, SIGNATURE_LENGTH } from "./constants";
 import { PegoutTxContract } from "./pegouttx.contract";
 import {
   DkgState,
@@ -243,8 +243,7 @@ export class CoordinatorContract implements Contract {
       .storeUint(OpCodes.DKG_START, 32)
       .storeUint(Math.floor(Date.now() / 1000) + (lifetime ?? 30), 32)
       .endCell();
-    const msgCell = await this.buildExternalMessage(signBody);
-    await provider.external(msgCell);
+    await provider.external(await this.signExternalBody(signBody));
   }
 
   async sendUpgrade(
@@ -295,8 +294,7 @@ export class CoordinatorContract implements Contract {
           .endCell(),
       )
       .endCell();
-    const msgCell = await this.buildExternalMessage(signBody);
-    await provider.external(msgCell);
+    await provider.external(await this.signExternalBody(signBody));
   }
 
   async sendRound2(
@@ -324,8 +322,7 @@ export class CoordinatorContract implements Contract {
           .endCell(),
       )
       .endCell();
-    const msgCell = await this.buildExternalMessage(signBody);
-    await provider.external(msgCell);
+    await provider.external(await this.signExternalBody(signBody));
   }
 
   async sendPubkeyPackage(
@@ -353,8 +350,7 @@ export class CoordinatorContract implements Contract {
           .endCell(),
       )
       .endCell();
-    const msgCell = await this.buildExternalMessage(signBody);
-    await provider.external(msgCell);
+    await provider.external(await this.signExternalBody(signBody));
   }
 
   async sendReinitializeDkg(
@@ -394,12 +390,7 @@ export class CoordinatorContract implements Contract {
           .endCell(),
       )
       .endCell();
-    const msgCell = await this.buildExternalMessage(signBody);
-    await provider.external(msgCell);
-
-    if (opts.identifier.length != 32) {
-      throw "identifier must be 32 bytes length";
-    }
+    await provider.external(await this.signExternalBody(signBody));
   }
 
   async sendSigningShare(
@@ -437,8 +428,7 @@ export class CoordinatorContract implements Contract {
           .endCell(),
       )
       .endCell();
-    const msgCell = await this.buildExternalMessage(signBody);
-    await provider.external(msgCell);
+    await provider.external(await this.signExternalBody(signBody));
   }
 
   async sendSignatures(
@@ -453,7 +443,7 @@ export class CoordinatorContract implements Contract {
   ) {
     const signaturesDict = Dictionary.empty(
       Dictionary.Keys.Uint(16),
-      Dictionary.Values.Buffer(65),
+      Dictionary.Values.Buffer(SIGNATURE_LENGTH),
     );
 
     for (let i = 0; i < opts.signatures.length; i++) {
@@ -461,8 +451,8 @@ export class CoordinatorContract implements Contract {
       if (opts.identifier.length != 32) {
         throw "identifier must be 32 bytes length";
       }
-      if (signature.length != 65) {
-        throw "signature must be 65 bytes length";
+      if (signature.length != SIGNATURE_LENGTH) {
+        throw `signature must be ${SIGNATURE_LENGTH} bytes length`;
       }
       signaturesDict.set(i, signature);
     }
@@ -477,8 +467,7 @@ export class CoordinatorContract implements Contract {
           .endCell(),
       )
       .endCell();
-    const msgCell = await this.buildExternalMessage(signBody);
-    await provider.external(msgCell);
+    await provider.external(await this.signExternalBody(signBody));
   }
 
   parseRound1Packages = (
@@ -635,26 +624,15 @@ export class CoordinatorContract implements Contract {
     return r2PkgsArr;
   }
 
-  private async buildExternalMessage(signBody: Cell): Promise<Cell> {
+  private async signExternalBody(unsignedBody: Cell): Promise<Cell> {
     const signature = this.signer
-      ? await this.signer!.signCell(signBody)
+      ? await this.signer!.signCell(unsignedBody)
       : Buffer.alloc(64, 0);
     const body = beginCell()
       .storeBuffer(signature, 64)
-      .storeSlice(signBody.asSlice())
+      .storeSlice(unsignedBody.asSlice())
       .endCell();
-    const message: Message = {
-      info: {
-        type: "external-in",
-        dest: this.address,
-        importFee: 0n,
-      },
-      body,
-    };
-    const cell = beginCell();
-    const store = storeMessage(message);
-    store(cell);
-    return cell.endCell();
+    return body;
   }
 
   async getCommitments(

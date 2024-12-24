@@ -15,6 +15,7 @@ import {
   buildScriptTree,
   calcTapscriptMerkleRoot,
   DEFAULT_CSV_LOCK,
+  ScriptBuilder,
   tweakInternalKey,
 } from "./utils";
 
@@ -22,24 +23,13 @@ initEccLib(tinysecp as any);
 const network = networks.testnet;
 
 class FROSTSigner implements SignerAsync {
-  // @ts-ignore
-  publicKey: Buffer | undefined;
+  publicKey: Buffer;
   network?: any;
   frost: FrostService;
-  tapMerkleRoot: Buffer;
-  scriptTree: Taptree;
-  constructor(frost: FrostService, tonAddress: Address) {
+  tapMerkleRoot?: Buffer;
+  constructor(frost: FrostService, tapMerkleRoot?: Buffer) {
     this.frost = frost;
-    this.scriptTree = buildScriptTree(
-      tonAddress,
-      this.getInternalPubkey(),
-      DEFAULT_CSV_LOCK,
-    );
-    const tapMerkleRoot = calcTapscriptMerkleRoot(
-      tonAddress,
-      this.getInternalPubkey(),
-    );
-    const pubkey = tweakInternalKey(this.getInternalPubkey(), tapMerkleRoot);
+    const pubkey = tweakInternalKey(this.getInternalPubkey(), tapMerkleRoot)!;
     this.publicKey = pubkey;
     this.network = network;
     this.tapMerkleRoot = tapMerkleRoot;
@@ -48,14 +38,11 @@ class FROSTSigner implements SignerAsync {
     lowR;
     console.log("sign hash", hash.toString("hex"));
     await this.frost.commit();
-    const signingPackage = await this.frost.createSigningPackage(
-      hash,
-      this.tapMerkleRoot,
-    );
-    await this.frost.signMessage(signingPackage);
-    const signature = await this.frost.aggregate();
+    const signingPackage = await this.frost.createSigningPackage(hash);
+    await this.frost.signMessage(signingPackage, undefined, this.tapMerkleRoot);
+    const signature = await this.frost.aggregate(undefined, this.tapMerkleRoot);
     console.log("signature", signature.toString("hex"), signature.length);
-    return signature.subarray(1);
+    return signature;
   }
 
   async signSchnorr(hash: Buffer): Promise<Buffer> {
@@ -196,7 +183,6 @@ describe("FrostService", () => {
 
     const signingPackage = await frostService.createSigningPackage(
       message,
-      undefined,
       identifiers,
     );
 
@@ -222,7 +208,6 @@ describe("FrostService", () => {
 
     const signingPackage = await frostService.createSigningPackage(
       message,
-      undefined,
       identifiers,
     );
 
@@ -248,7 +233,6 @@ describe("FrostService", () => {
 
     const signingPackage = await frostService.createSigningPackage(
       message,
-      undefined,
       identifiers,
     );
 
@@ -275,7 +259,6 @@ describe("FrostService", () => {
 
     const signingPackage = await frostService.createSigningPackage(
       message,
-      undefined,
       identifiers,
     );
 
@@ -286,76 +269,158 @@ describe("FrostService", () => {
     expect(signature).toHaveLength(expectedSignatureLength);
   });
 
-  it.skip("Sign bitcoin taproot transaction", async () => {
-    await frostService.init();
-    await frostService.generateKey();
+  describe.skip("FROST signing of bitcoin tx (1 input - 1 output)", () => {
     const tonAddress = Address.parse(
       "0QAPBt1yVUndYKbKN0OsUy21J4nLFa8flD_patu0wahhVe_P",
     );
-    const frostSigner = new FROSTSigner(frostService, tonAddress);
-    console.log(
-      "internalKey",
-      frostSigner.getInternalPubkey().toString("hex"),
-      frostSigner.getInternalPubkey().length,
-    );
-    // @ts-ignore
-    console.log("tweakedKey", frostSigner.publicKey.toString("hex"));
-
-    const p2pktr = payments.p2tr({
-      internalPubkey: frostSigner.getInternalPubkey(),
-      scriptTree: frostSigner.scriptTree,
-      network,
-    });
-    const p2pktr_addr = p2pktr.address ?? "";
-    console.log(
-      `Waiting till UTXO is detected at this Address: ${p2pktr_addr}`,
-    );
-
-    const utxos = await waitUntilUTXO(p2pktr_addr);
-    console.log(`Using UTXO ${utxos[0].txid}:${utxos[0].vout}`);
-
-    const p2pkRedeem = {
-      output: script.fromASM(
-        `${frostSigner.getInternalPubkey().toString("hex")} OP_CHECKSIG`,
-      ),
-      redeemVersion: 192,
-    };
-
-    const p2pkScriptPath = payments.p2tr({
-      internalPubkey: frostSigner.getInternalPubkey(),
-      scriptTree: frostSigner.scriptTree,
-      redeem: p2pkRedeem,
-      network,
-    });
-
+    let tapMerkleRoot: Buffer | undefined;
+    let scriptTree: Taptree | undefined;
     const psbt = new Psbt({ network });
-    psbt.addInput({
-      hash: utxos[0].txid,
-      index: utxos[0].vout,
-      witnessUtxo: { value: utxos[0].value, script: p2pktr.output! },
-      tapInternalKey: p2pktr.internalPubkey!,
-      tapLeafScript: [
-        {
-          leafVersion: p2pkRedeem.redeemVersion,
-          script: p2pkRedeem.output,
-          controlBlock:
-            p2pkScriptPath.witness![p2pkScriptPath.witness!.length - 1],
-        },
-      ],
+
+    beforeEach(async () => {
+      frostService = new FrostService();
+      await frostService.init();
+      await frostService.generateKey();
+
+      scriptTree = buildScriptTree(
+        tonAddress,
+        frostService.schnorrPubkey,
+        DEFAULT_CSV_LOCK,
+      );
+      tapMerkleRoot = calcTapscriptMerkleRoot(
+        tonAddress,
+        frostService.schnorrPubkey,
+      );
+      console.log(
+        "internalKey",
+        frostService.schnorrPubkey.toString("hex"),
+        frostService.schnorrPubkey.length,
+      );
     });
 
-    psbt.addOutput({
-      address: "tb1qx6qzawgya324umgkqyqejhr2gj0hghp4mfk9nd",
-      value: utxos[0].value - 150,
-    });
+    it("Tx with tapscript and key path spending", async () => {
+      const frostSigner = new FROSTSigner(frostService, tapMerkleRoot);
+      console.log("tweakedKey", frostSigner.publicKey.toString("hex"));
 
-    // @ts-ignore
-    await psbt.signInputAsync(0, frostSigner);
-    psbt.finalizeAllInputs();
+      const p2pktr = payments.p2tr({
+        internalPubkey: frostSigner.getInternalPubkey(),
+        scriptTree,
+        network,
+      });
+      const p2pktr_addr = p2pktr.address ?? "";
+      console.log(
+        `Waiting till UTXO is detected at this Address: ${p2pktr_addr}`,
+      );
 
-    const tx = psbt.extractTransaction();
-    console.log(`Broadcasting Transaction Hex: ${tx.toHex()}`);
-    const txid = await broadcast(tx.toHex());
-    console.log(`Success! Txid is ${txid}`);
-  }, 300000);
+      const utxos = await waitUntilUTXO(p2pktr_addr);
+      console.log(`Using UTXO ${utxos[0].txid}:${utxos[0].vout}`);
+
+      psbt.addInput({
+        hash: utxos[0].txid,
+        index: utxos[0].vout,
+        witnessUtxo: { value: utxos[0].value, script: p2pktr.output! },
+        tapInternalKey: p2pktr.internalPubkey!,
+      });
+
+      psbt.addOutput({
+        address: "tb1qe7cqrmthdt6tc4jkw4v488fzcv96dkzgauxw0r",
+        value: utxos[0].value - 160,
+      });
+      await psbt.signInputAsync(0, frostSigner);
+    }, 60000);
+
+    it("Tx with tapscript and script path spending", async () => {
+        const frostSigner = new FROSTSigner(frostService, tapMerkleRoot);
+        console.log("tweakedKey", frostSigner.publicKey.toString("hex"));
+  
+        const p2pktr = payments.p2tr({
+          internalPubkey: frostSigner.getInternalPubkey(),
+          scriptTree,
+          network,
+        });
+
+        const p2pktr_addr = p2pktr.address ?? "";
+        console.log(
+          `Waiting till UTXO is detected at this Address: ${p2pktr_addr}`,
+        );
+  
+        const utxos = await waitUntilUTXO(p2pktr_addr);
+        console.log(`Using UTXO ${utxos[0].txid}:${utxos[0].vout}`);
+  
+        const p2pkRedeem = {
+          output: ScriptBuilder.opCheckSequenceVerify(
+            frostSigner.getInternalPubkey(),
+            DEFAULT_CSV_LOCK,
+          ),
+          redeemVersion: 192,
+        };
+        const p2pkScriptPath = payments.p2tr({
+          internalPubkey: frostSigner.getInternalPubkey(),
+          scriptTree,
+          redeem: p2pkRedeem,
+          network,
+        });
+  
+        psbt.addInput({
+          hash: utxos[0].txid,
+          index: utxos[0].vout,
+          witnessUtxo: { value: utxos[0].value, script: p2pktr.output! },
+          tapInternalKey: p2pktr.internalPubkey!,
+          tapLeafScript: [
+            {
+              leafVersion: p2pkRedeem.redeemVersion,
+              script: p2pkRedeem.output,
+              controlBlock:
+                p2pkScriptPath.witness![p2pkScriptPath.witness!.length - 1],
+            },
+          ],
+        });
+  
+        psbt.addOutput({
+          address: "tb1qe7cqrmthdt6tc4jkw4v488fzcv96dkzgauxw0r",
+          value: utxos[0].value - 160,
+        });
+        await psbt.signInputAsync(0, frostSigner);
+    }, 60000);
+
+    it("Tx and key path spending", async () => {
+        const frostSigner = new FROSTSigner(frostService, undefined);
+        console.log("tweakedKey", frostSigner.publicKey.toString("hex"));
+  
+        const p2pktr = payments.p2tr({
+          internalPubkey: frostSigner.getInternalPubkey(),
+          network,
+        });
+
+        const p2pktr_addr = p2pktr.address ?? "";
+        console.log(
+          `Waiting till UTXO is detected at this Address: ${p2pktr_addr}`,
+        );
+  
+        const utxos = await waitUntilUTXO(p2pktr_addr);
+        console.log(`Using UTXO ${utxos[0].txid}:${utxos[0].vout}`);
+
+  
+        psbt.addInput({
+          hash: utxos[0].txid,
+          index: utxos[0].vout,
+          witnessUtxo: { value: utxos[0].value, script: p2pktr.output! },
+          tapInternalKey: p2pktr.internalPubkey!,
+        });
+  
+        psbt.addOutput({
+          address: "tb1qe7cqrmthdt6tc4jkw4v488fzcv96dkzgauxw0r",
+          value: utxos[0].value - 160,
+        });
+        await psbt.signInputAsync(0, frostSigner);
+    }, 60000);
+
+    afterEach(async () => {
+      psbt.finalizeAllInputs();
+      const tx = psbt.extractTransaction();
+      console.log(`Broadcasting Transaction Hex: ${tx.toHex()}`);
+      const txid = await broadcast(tx.toHex());
+      console.log(`Success! Txid is ${txid}`);
+    }, 300000);
+  });
 });
