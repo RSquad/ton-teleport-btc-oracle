@@ -1,6 +1,6 @@
 import { ConfigService } from "../base/config.service";
 import { Logger } from "../base/logger.service";
-import { DKGChannelContract, DkgState, type TDKG } from "../contracts";
+import { CoordinatorContract, DkgState, type TDKG } from "../contracts";
 import { KeystoreService } from "../keystore/keystore.service";
 import { TonService } from "../ton/ton.service";
 import type { OpenedContract } from "@ton/ton";
@@ -9,19 +9,12 @@ import type { ValidatorService } from "../ton/validator.service.ts";
 
 const frost = require("frost.node");
 
-enum DkgRound {
-  NOT_STARTED,
-  R1_COMPLETED,
-  R2_COMPLETED,
-  COMPLETED,
-}
-
-export type TDKGRound1Result = {
+type TDKGRound1Result = {
   secretPackagePtr: string;
   packageBuffer: Buffer;
 };
 
-export type TDKGRound2Result = {
+type TDKGRound2Result = {
   secretPtr: string;
   round2Packages: {
     identifier: string;
@@ -29,18 +22,23 @@ export type TDKGRound2Result = {
   }[];
 };
 
+type TDKGRound3Result = {
+  keyPackage: Buffer;
+  publicKeyPackage: Buffer;
+  verifyingKey: Buffer;
+};
+
 export class DkgService {
   private readonly logger = new Logger(DkgService.name);
-  private dkgRound: DkgRound;
   private inProgress: boolean;
-  private r1Secret?: string;
-  private r2Secret?: string;
-  private dkgR1Res?: TDKGRound1Result;
-  private dkgR2Res?: TDKGRound2Result;
+  private part1Result?: TDKGRound1Result;
+  private part2Result?: TDKGRound2Result;
+  private part3Result?: TDKGRound3Result;
+  private dkgUntil: number = 0;
   private configService: ConfigService;
   private tonService: TonService;
   private keyStore: KeystoreService;
-  private tcCoordinator: OpenedContract<DKGChannelContract>;
+  private tcCoordinator: OpenedContract<CoordinatorContract>;
   private validatorService: ValidatorService;
 
   constructor(
@@ -55,15 +53,21 @@ export class DkgService {
     this.validatorService = validatorService;
 
     this.inProgress = false;
-    this.dkgRound = DkgRound.NOT_STARTED;
     this.tcCoordinator = this.tonService.tonClient.open(
-      DKGChannelContract.createFromAddress(
+      CoordinatorContract.createFromAddress(
         Address.parse(this.configService.getOrThrow("COORDINATOR")),
       ),
     );
   }
 
   async init() {}
+
+  private reset(until: number) {
+    this.part1Result = undefined;
+    this.part2Result = undefined;
+    this.part3Result = undefined;
+    this.dkgUntil = until;
+  }
 
   async executeDkg() {
     if (this.inProgress) {
@@ -74,24 +78,26 @@ export class DkgService {
     this.logger.log("DKG job started.");
 
     try {
-      await this.tonService.tcDkgChannel.sendStartDKG();
+      await this.tonService.tcCoordinator.sendStartDKG();
     } catch (e) {
       this.logger.debug(e);
     }
 
     try {
-      let dkg = await this.tonService.tcDkgChannel.getDKG();
+      let dkg = await this.tonService.tcCoordinator.getDKG();
       if (!dkg) {
         this.logger.log("DKG not yet started.");
         return;
       }
 
-      if (this.dkgRound === DkgRound.COMPLETED) {
-        if (dkg!.state === DkgState.FINISHED) {
-          this.logger.log("DKG finished. No need to execute.");
-          return;
-        }
-        this.reset();
+      if (dkg!.state === DkgState.FINISHED) {
+        this.logger.log("DKG finished. No need to execute.");
+        return;
+      }
+
+      if (dkg!.until != this.dkgUntil) {
+        this.reset(dkg!.until);
+        this.logger.log(`New DKG started. Until ${dkg!.until}.`);
       }
 
       await this.execute(dkg);
@@ -113,98 +119,114 @@ export class DkgService {
     }
 
     await this.tcCoordinator.connect(
-      this.validatorService.getSigner(key!.valdiatorKey),
+      this.validatorService.getSigner(key!.validatorId),
     );
 
     const validatorIdx = key!.validatorIdx;
-    const validatorPublicKey = key!.valdiatorKey.toString("hex");
+    const validatorPublicKey = key!.validatorKey.toString("hex");
     try {
-      switch (this.dkgRound) {
-        case DkgRound.R2_COMPLETED:
-          await this.executeR3(dkg, validatorIdx!, validatorPublicKey!);
-          break;
-        case DkgRound.R1_COMPLETED:
-          await this.executeR2(dkg, validatorIdx!, validatorPublicKey!);
-          break;
-        default:
-          await this.executeR1(dkg, validatorIdx!, validatorPublicKey!);
-          break;
-      }
-    } catch (e) {
+      (await this.executeR1(dkg, validatorIdx!, validatorPublicKey!)) &&
+        (await this.executeR2(dkg, validatorIdx!, validatorPublicKey!)) &&
+        (await this.executeR3(dkg, validatorIdx!, validatorPublicKey!));
+    } catch (e: any) {
       this.logger.error(e);
     }
   }
 
-  private async executeR3(dkg: TDKG, validatorIdx: number, identifier: string) {
+  private async executeR3(
+    dkg: TDKG,
+    validatorIdx: number,
+    identifier: string,
+  ): Promise<boolean> {
     this.logger.log("Entering R3...");
 
-    const isR2Completed =
-      dkg.state >= DkgState.PART2_FINISHED || dkg.state === DkgState.FINISHED;
-    if (!isR2Completed) {
-      this.logger.log("R2 not yet completed, waiting for more packages...");
-      return;
+    const dkgCompleted = dkg.state === DkgState.FINISHED;
+    if (dkgCompleted) {
+      this.logger.log("DKG completed.");
+      return false;
     }
 
-    const onchainPubkeyPackage = dkg.pubkeyPackage;
-    let pubkeyPkg = onchainPubkeyPackage;
-    if (!(pubkeyPkg && this.loadSecretPackage(pubkeyPkg))) {
+    const isR2Completed = dkg.state >= DkgState.PART2_FINISHED;
+    if (!isR2Completed) {
+      this.logger.log("R2 not yet completed, waiting for more packages.");
+      return false;
+    }
+
+    const isPackageSent = dkg.r3Package.mask & (1n << BigInt(validatorIdx));
+    const onchainPubkeyPackage = dkg.r3Package.pubkeyData?.pubkeyPackage;
+    if (
+      onchainPubkeyPackage == undefined ||
+      this.loadSecretPackage(onchainPubkeyPackage) == undefined
+    ) {
       // to generate secret package, r2 secret must be present.
-      if (!this.r2Secret) {
+      if (!this.part2Result) {
         throw new Error("R2 secret not found");
       }
       const r1Pkgs = this.tcCoordinator.r1Pkgs(dkg, identifier);
       const r2Pkgs = this.tcCoordinator.r2Pkgs(dkg, identifier);
-      this.logger.log(`Part3 started`);
-      const dkgR3Res = frost.dkgPart3(this.r2Secret, r1Pkgs, r2Pkgs);
-      this.storeSecretPackage(dkgR3Res.publicKeyPackage, dkgR3Res.keyPackage);
-      pubkeyPkg = dkgR3Res.publicKeyPackage;
+      if (!this.part3Result) {
+        this.logger.log(`Call Part3`);
+        this.part3Result = frost.dkgPart3(
+          this.part2Result.secretPtr,
+          r1Pkgs,
+          r2Pkgs,
+        );
+      }
+      this.storeSecretPackage(
+        this.part3Result!.publicKeyPackage,
+        this.part3Result!.keyPackage,
+      );
       this.logger.log(`Secret package saved.`);
-      this.logger.log(`Part3 completed.`);
+    } else {
+      if (!this.part3Result) {
+        this.logger.log(`Restore R3 package.`);
+        this.part3Result = {
+          publicKeyPackage: onchainPubkeyPackage,
+          keyPackage: this.loadSecretPackage(onchainPubkeyPackage)!,
+          verifyingKey: (await frost.fromPublicKeyPackage(onchainPubkeyPackage))
+            .verifyingKey,
+        };
+      }
     }
 
-    if (!onchainPubkeyPackage && pubkeyPkg) {
-      const { verifyingKey }: { verifyingKey: Buffer } =
-        await frost.fromPublicKeyPackage(pubkeyPkg);
-      const internalKeyXY = verifyingKey;
+    if (this.part3Result && !isPackageSent) {
       await this.tcCoordinator.sendPubkeyPackage({
+        identifier: Buffer.from(identifier, "hex"),
         validatorIdx,
-        pubkeyPackage: pubkeyPkg,
-        internalKeyXY,
+        pubkeyPackage: this.part3Result.publicKeyPackage,
+        internalKeyXY: this.part3Result.verifyingKey,
       });
+      this.logger.log(`R3 package sent.`);
     }
 
-    if (
-      onchainPubkeyPackage &&
-      pubkeyPkg &&
-      this.loadSecretPackage(pubkeyPkg)
-    ) {
-      this.dkgRound = DkgRound.COMPLETED;
-    }
+    return false;
   }
 
-  private async executeR2(dkg: TDKG, validatorIdx: number, identifier: string) {
+  private async executeR2(
+    dkg: TDKG,
+    validatorIdx: number,
+    identifier: string,
+  ): Promise<boolean> {
     this.logger.log("Entering R2...");
     const isR1Completed =
       dkg.state >= DkgState.PART1_FINISHED || dkg.state === DkgState.FINISHED;
     if (!isR1Completed) {
       this.logger.log("R1 not yet completed, waiting for more packages.");
-      return;
+      return false;
     }
 
     const isR2Completed =
       dkg.state >= DkgState.PART2_FINISHED || dkg.state === DkgState.FINISHED;
     if (isR2Completed) {
       this.logger.log("R2 completed.");
-      this.dkgRound = DkgRound.R2_COMPLETED;
-      return;
+      return true;
     }
 
     const r2Pkgs = dkg.r2Packages.packages;
-
-    let sentCount = 0;
     const r2Map = this.tcCoordinator.parseRound2Packages(r2Pkgs);
     r2Map.delete(identifier);
 
+    let sentCount = 0;
     r2Map.forEach((pkg) => {
       if (pkg.has(identifier)) {
         sentCount += 1;
@@ -212,28 +234,23 @@ export class DkgService {
     });
     if (sentCount >= dkg.maxSigners - 1) {
       this.logger.log(`R2 packages are sent.`);
-      this.dkgRound = DkgRound.R2_COMPLETED;
-      return;
+      return false;
     }
 
-    if (!this.r1Secret) {
+    if (!this.part1Result) {
       throw new Error("R1 secret not found.");
     }
 
-    this.logger.log(`Received R1 packages. Preparing for R2.`);
-
-    if (!this.r2Secret) {
+    if (!this.part2Result) {
+      this.logger.log(`Call part2.`);
       const r1Pkgs = await this.tcCoordinator.r1Pkgs(dkg, identifier);
-      this.dkgR2Res = frost.dkgPart2(this.r1Secret, r1Pkgs);
+      this.part2Result = frost.dkgPart2(
+        this.part1Result!.secretPackagePtr,
+        r1Pkgs,
+      );
     }
 
-    if (!this.dkgR2Res) {
-      throw new Error("dkgR2Res is undefined");
-    }
-
-    this.r2Secret = this.dkgR2Res!.secretPtr;
-
-    for (const pkg of this.dkgR2Res!.round2Packages) {
+    for (const pkg of this.part2Result!.round2Packages) {
       try {
         this.logger.log(`Sending R2 package to ${pkg.identifier}`);
         await this.tcCoordinator.sendRound2({
@@ -248,40 +265,42 @@ export class DkgService {
         );
       }
     }
+    return false;
   }
 
-  private async executeR1(dkg: TDKG, validatorIdx: number, identifier: string) {
-    const r1Pkgs = dkg.r1Packages.packages;
-
-    if (!!this.tcCoordinator.parseRound1Packages(r1Pkgs).get(identifier)) {
-      this.logger.log(`R1 package sent. DKG R1 initiated.`);
-      this.dkgRound = DkgRound.R1_COMPLETED;
-      return;
+  private async executeR1(
+    dkg: TDKG,
+    validatorIdx: number,
+    identifier: string,
+  ): Promise<boolean> {
+    this.logger.log("Entering R1...");
+    const isR1Completed =
+      dkg.state >= DkgState.PART1_FINISHED || dkg.state === DkgState.FINISHED;
+    if (isR1Completed) {
+      this.logger.log("R1 completed.");
+      return true;
     }
 
-    this.logger.log("Starting DKG process with R1.");
-
-    if (!this.dkgR1Res) {
-      const minSigners = Math.floor((dkg.maxSigners * 2) / 3);
-      this.dkgR1Res = frost.dkgPart1(identifier, dkg.maxSigners, minSigners);
+    const identifierBuf = Buffer.from(identifier, "hex");
+    if (dkg.r1Packages.packages.get(identifierBuf)) {
+      this.logger.log(`R1 package already sent.`);
+      return false;
     }
 
-    this.r1Secret = this.dkgR1Res!.secretPackagePtr;
+    if (!this.part1Result) {
+      this.logger.log("Call part1");
+      const minSigners = Math.max(2, Math.floor((dkg.maxSigners * 2) / 3));
+      this.part1Result = frost.dkgPart1(identifier, dkg.maxSigners, minSigners);
+    }
 
     await this.tcCoordinator.sendRound1({
       validatorIdx: validatorIdx,
       identifier: Buffer.from(identifier, "hex"),
-      round1Package: this.dkgR1Res!.packageBuffer,
+      round1Package: this.part1Result!.packageBuffer,
       lifetime: 30,
     });
-  }
-
-  private reset() {
-    this.dkgRound = DkgRound.NOT_STARTED;
-    this.dkgR1Res = undefined;
-    this.dkgR2Res = undefined;
-    this.r1Secret = "";
-    this.r2Secret = "";
+    this.logger.log("R1 package sent.");
+    return false;
   }
 
   private loadSecretPackage(publicKeyPackage: Buffer): Buffer | undefined {
@@ -304,19 +323,17 @@ export class DkgService {
     );
   }
 
-  public isDkgCompleted() {
-    return this.dkgRound === DkgRound.COMPLETED;
-  }
-
   public async sign(
     publicKey: Buffer,
     signingPackage: Buffer,
     signingNonce: Buffer,
+    taprootMerkleRoot?: Buffer,
   ) {
     return await frost.sign(
       signingPackage,
       signingNonce,
       this.keyStore.load(publicKey.toString("hex")),
+      taprootMerkleRoot
     );
   }
 
@@ -329,11 +346,5 @@ export class DkgService {
       nonce: result.signingNonce,
       commitments: result.signingCommitments,
     };
-  }
-
-  public async getCommitsMap(pegoutTxId: number) {
-    return this.tcCoordinator.getCommitsMap({
-      pegoutTxId: pegoutTxId,
-    });
   }
 }

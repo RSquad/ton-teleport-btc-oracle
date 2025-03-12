@@ -42,3 +42,8 @@ export interface ValidatorEngineConfig {
   "out_port": number;
   "validators": Validator[];
 }
+
+export interface ValidatorKeysResponse {
+  validatorKeys: string[];
+  validatorIds: string[];
+}

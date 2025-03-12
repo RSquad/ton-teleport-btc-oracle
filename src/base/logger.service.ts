@@ -31,6 +31,7 @@ export class Logger {
   }
 
   debug(message: any, ...optionalParams: any[]) {
+    message = this.context ? `[${this.context}]: ${message}` : message;
     this.call("debug", message, ...optionalParams);
   }
 
@@ -60,7 +61,11 @@ export class Logger {
       params = optionalParams.slice(0, -1);
     }
 
-    if (typeof message === "object") {
+
+    if (message?.response?.data?.error) {
+      objArg["error"] = message?.response?.data?.code;
+      this.logger[level](objArg, message?.response?.data?.error, ...params);
+    } else if (typeof message === "object") {
       if (message instanceof Error) {
         objArg["err"] = message;
       } else {
@@ -72,7 +77,6 @@ export class Logger {
       objArg["err"].stack = params[0];
       this.logger[level](objArg);
     } else {
-      message = this.context ? `[${this.context}]: ${message}` : message;
       this.logger[level](objArg, message, ...params);
     }
   }
