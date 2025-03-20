@@ -7,13 +7,11 @@ import {
   Slice,
   beginCell,
   contractAddress,
-  storeMessage,
   type Contract,
   type DictionaryKey,
   type DictionaryValue,
   type ContractProvider,
   type Sender,
-  type Message,
 } from "@ton/core";
 import { type ISigner } from "../signers";
 import { splitBufferToCells, writeCellsToBuffer } from "./common";
